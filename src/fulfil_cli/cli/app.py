@@ -239,6 +239,81 @@ def reports_list_cmd(ctx: click.Context, json_flag: bool) -> None:
     _list_reports(json_flag)
 
 
+@app.command(name="getting-started")
+def getting_started() -> None:
+    """Show a quick-start guide for using the CLI."""
+    from rich.markdown import Markdown
+
+    guide = """\
+# Getting Started with Fulfil CLI
+
+## 1. Authenticate
+
+```
+fulfil auth login
+```
+
+This prompts for your workspace domain and API key, then stores
+credentials in your system keyring.
+
+For scripts and CI, use environment variables instead:
+
+```
+export FULFIL_API_KEY=sk_live_...
+export FULFIL_WORKSPACE=acme.fulfil.io
+```
+
+## 2. Explore your data
+
+```
+fulfil models                          # list all models
+fulfil models --search shipment        # search for models
+fulfil sales_order describe            # see fields and endpoints
+```
+
+## 3. Query records
+
+```
+fulfil sales_order list --fields reference,state,total_amount
+fulfil sales_order list --where '{"state": "confirmed"}'
+fulfil sales_order count
+fulfil sales_order get 42
+```
+
+## 4. Create and update records
+
+```
+fulfil contact create --data '{"name": "Acme Corp"}'
+fulfil sales_order update 42 --data '{"comment": "Approved"}'
+```
+
+## 5. Call workflow methods
+
+Don't update state fields directly — use workflow methods:
+
+```
+fulfil sales_order call confirm --ids 1,2,3
+fulfil sales_order call process --ids 42
+```
+
+## 6. Reports
+
+```
+fulfil reports                                    # list reports
+fulfil reports price_list_report describe          # see parameters
+fulfil reports price_list_report execute --params '{"date_from": "2024-01-01"}'
+```
+
+## Tips
+
+- Use `--json` to force JSON output (automatic when piped)
+- Use `--debug` to see HTTP request/response details
+- Use `-h` on any command for help: `fulfil sales_order list -h`
+- Run `fulfil completion` to install shell completions
+"""
+    Console().print(Markdown(guide))
+
+
 # Register standalone commands
 app.command(name="api")(api_cmd)
 app.command(name="completion")(completion_install)

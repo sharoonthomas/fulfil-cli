@@ -138,7 +138,7 @@ fulfil sales_order count --where '{"state": "draft"}'
 
 ```bash
 fulfil sales_order call confirm --ids 1,2,3
-fulfil sales_order call process --ids 42 --data '{"warehouse": 1}'
+fulfil sales_order call process --ids 42
 ```
 
 ### Exploring models

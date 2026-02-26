@@ -1,66 +1,116 @@
 # Fulfil CLI — Agent Guide
 
-## What is this?
+The Fulfil CLI (`fulfil`) is a command-line tool for the [Fulfil](https://fulfil.io) ERP platform. It communicates via JSON-RPC 2.0 with the Fulfil v3 API.
 
-The Fulfil CLI (`fulfil`) is a command-line interface for the Fulfil ERP platform. It communicates via JSON-RPC 2.0 with the Fulfil v3 API.
-
-## Quick Start
+## Setup
 
 ```bash
 # Install
 uv tool install fulfil-cli
 
-# Authenticate
-fulfil auth login --workspace acme.fulfil.io --api-key sk_live_...
+# Authenticate (non-interactive)
+export FULFIL_API_KEY=sk_live_...
+export FULFIL_WORKSPACE=acme.fulfil.io
 
-# Use
-fulfil sales_order list --where '{"state": "processing"}' --json
-fulfil sales_order get 42 --fields id,reference,state --json
-fulfil models --json
+# Verify
+fulfil whoami --json
 ```
 
-## For AI Agents
+## Key Rules for Agents
 
 - **Always use `--json`** for structured output (auto-enabled when stdout is not a TTY)
-- **Env vars**: `FULFIL_API_KEY`, `FULFIL_WORKSPACE`, `FULFIL_JSON=1`
-- **Exit codes**: 0=ok, 2=usage, 3=config, 4=auth, 5=not-found, 6=forbidden, 7=validation, 8=rate-limit, 9=server, 10=network
-- **Error output** goes to stderr; data output goes to stdout
-- **NDJSON streaming**: `fulfil sales_order list --all --json` outputs one record per line
+- **Use env vars** for auth: `FULFIL_API_KEY`, `FULFIL_WORKSPACE` — no interactive prompts
+- **Set `FULFIL_JSON=1`** to force JSON even when stdout is a TTY
+- **Errors go to stderr**, data to stdout — safe to parse stdout directly
+- **Exit codes** are structured: 0=ok, 2=usage, 3=config, 4=auth, 5=not-found, 6=forbidden, 7=validation, 8=rate-limit, 9=server, 10=network
+- **Never update state/status fields directly** — use workflow methods (`call confirm`, `call process`, etc.)
 
 ## Command Reference
 
-| Command | Description |
-|---------|-------------|
-| `fulfil <model> list` | List records with filters |
-| `fulfil <model> get <ids>` | Get records by ID |
-| `fulfil <model> create --data '{...}'` | Create records |
-| `fulfil <model> update <ids> --data '{...}'` | Update records |
-| `fulfil <model> delete <ids>` | Delete records |
-| `fulfil <model> count --where '{...}'` | Count matching records |
-| `fulfil <model> call <method>` | Call a custom model method |
-| `fulfil <model> fields` | Describe model fields |
-| `fulfil models` | List available models |
-| `fulfil api '<json>'` | Raw JSON-RPC call |
-| `fulfil auth login` | Authenticate |
-| `fulfil auth status` | Check auth status |
-| `fulfil auth workspaces` | List stored workspaces |
-| `fulfil auth use <workspace>` | Switch active workspace |
-| `fulfil whoami` | Show user/workspace info |
-| `fulfil version` | Show CLI version |
-
-## JSON-RPC Raw Call
+### Records (any model name is a valid command)
 
 ```bash
-fulfil api '{"method": "sales_order.find", "params": {"where": {"state": "draft"}, "fields": ["id", "reference"]}}'
+# List with filters, sorting, pagination
+fulfil sales_order list --where '{"state": "confirmed"}' --fields reference,state --order sale_date:desc --limit 50 --json
+
+# Get by ID
+fulfil sales_order get 42 --json
+fulfil sales_order get 1,2,3 --json
+
+# Create (single or batch)
+fulfil contact create --data '{"name": "Acme Corp"}' --json
+fulfil contact create --data '[{"name": "Alice"}, {"name": "Bob"}]' --json
+
+# Create with nested records
+fulfil contact create --data '{"name": "Acme Corp", "addresses": [{"street": "100 Broadway", "city": "New York"}]}' --json
+
+# Update data fields (not state — use call for workflow transitions)
+fulfil sales_order update 42 --data '{"comment": "Approved by finance"}' --json
+
+# Delete (requires --yes in non-interactive mode)
+fulfil sales_order delete 42 --yes
+
+# Count
+fulfil sales_order count --where '{"state": "draft"}' --json
+
+# Call workflow methods
+fulfil sales_order call confirm --ids 1,2,3 --json
+fulfil sales_order call process --ids 42 --json
+
+# Describe model fields and endpoints
+fulfil sales_order describe --json
 ```
 
-## Project Structure
+### Filter Operators
 
+`gt`, `gte`, `lt`, `lte`, `ne`, `in`, `not_in`, `contains`, `startswith`, `endswith`
+
+```bash
+fulfil sales_order list --where '{"total_amount": {"gte": 1000}}' --json
+fulfil sales_order list --where '{"or": [{"state": "draft"}, {"state": "confirmed"}]}' --json
 ```
-src/fulfil/
-  cli/           # CLI commands (Typer + Click)
-  client/        # JSON-RPC 2.0 HTTP client
-  auth/          # API key resolution + keyring
-  config/        # TOML config + XDG paths
-  output/        # JSON/table formatting
+
+### Pagination
+
+The `list` command returns a pagination envelope:
+
+```json
+{"data": [...], "pagination": {"has_more": true, "next_cursor": "abc123"}}
+```
+
+Use the cursor for the next page:
+
+```bash
+fulfil sales_order list --cursor abc123 --json
+```
+
+### Discovery
+
+```bash
+# List all models
+fulfil models --json
+
+# Search models
+fulfil models --search shipment --json
+
+# List reports
+fulfil reports --json
+
+# Describe a report's parameters
+fulfil reports price_list_report describe --json
+```
+
+### Other Commands
+
+```bash
+# Raw JSON-RPC
+fulfil api '{"method": "system.version", "params": {}}' --json
+
+# Auth
+fulfil whoami --json
+fulfil auth status
+fulfil workspaces
+
+# Version
+fulfil version --json
 ```
