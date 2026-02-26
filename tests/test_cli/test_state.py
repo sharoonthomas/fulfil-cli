@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
 
 from fulfil_cli.cli.state import get_client, is_debug, is_quiet, set_globals
@@ -78,7 +80,10 @@ class TestGetClient:
         monkeypatch.delenv("FULFIL_API_KEY", raising=False)
         set_globals()
 
-        with pytest.raises(AuthError, match="No API key"):
+        with (
+            patch("fulfil_cli.auth.api_key.get_api_key", return_value=None),
+            pytest.raises(AuthError, match="No API key"),
+        ):
             get_client()
 
     def test_set_globals_resets_cache(self, monkeypatch):
