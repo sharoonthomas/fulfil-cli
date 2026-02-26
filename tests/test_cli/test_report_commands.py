@@ -59,23 +59,17 @@ class TestReportExecute:
     def test_execute_no_params(self, httpx_mock, cli_env, jsonrpc_success):
         httpx_mock.add_response(json=jsonrpc_success({"columns": [], "data": []}))
 
-        result = runner.invoke(
-            app, ["reports", "sales_report", "execute", "--json"]
-        )
+        result = runner.invoke(app, ["reports", "sales_report", "execute", "--json"])
         assert result.exit_code == 0
 
     def test_execute_invalid_json(self, cli_env):
-        result = runner.invoke(
-            app, ["reports", "sales_report", "execute", "--params", "bad"]
-        )
+        result = runner.invoke(app, ["reports", "sales_report", "execute", "--params", "bad"])
         assert result.exit_code == 7
 
     def test_execute_server_error(self, httpx_mock, cli_env, jsonrpc_error):
         httpx_mock.add_response(json=jsonrpc_error(code=-32603, message="Report failed"))
 
-        result = runner.invoke(
-            app, ["reports", "sales_report", "execute", "--json"]
-        )
+        result = runner.invoke(app, ["reports", "sales_report", "execute", "--json"])
         assert result.exit_code == 9
 
     def test_default_action_is_execute(self, httpx_mock, cli_env, jsonrpc_success):
@@ -101,9 +95,7 @@ class TestReportDescribe:
         }
         httpx_mock.add_response(json=jsonrpc_success(schema))
 
-        result = runner.invoke(
-            app, ["reports", "sales_report", "describe", "--json"]
-        )
+        result = runner.invoke(app, ["reports", "sales_report", "describe", "--json"])
         assert result.exit_code == 0
 
         data = json.loads(result.stdout)
