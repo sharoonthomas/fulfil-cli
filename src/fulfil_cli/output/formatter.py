@@ -6,10 +6,13 @@ import os
 import sys
 from typing import Any
 
+from rich.console import Console
+from rich.rule import Rule
+
 from fulfil_cli.output.describe import print_model_describe
 from fulfil_cli.output.json_output import print_json, print_ndjson
 from fulfil_cli.output.report import print_report, print_schema
-from fulfil_cli.output.table import print_table
+from fulfil_cli.output.table import print_record, print_table
 
 
 def should_use_json() -> bool:
@@ -42,11 +45,24 @@ def output(
 
     # For table display, data must be a list of dicts
     if isinstance(data, list) and data and isinstance(data[0], dict):
-        print_table(data, title=title)
+        # If records have nested dicts, render each as a detail view
+        if _has_nested_dicts(data[0]):
+            console = Console(stderr=False)
+            for i, record in enumerate(data):
+                if i > 0:
+                    console.print(Rule(style="dim"))
+                print_record(record, title=title)
+        else:
+            print_table(data, title=title)
     elif isinstance(data, dict):
-        print_table([data], title=title)
+        print_record(data, title=title)
     else:
         print_json(data)
+
+
+def _has_nested_dicts(record: dict) -> bool:
+    """Check if a record has nested dict values (indicating rich sub-records)."""
+    return any(isinstance(v, dict) for v in record.values())
 
 
 def output_report(
