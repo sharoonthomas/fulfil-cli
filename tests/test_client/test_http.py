@@ -110,6 +110,52 @@ def test_batch_with_error(client: FulfilClient, httpx_mock):
         )
 
 
+def test_call_403(client: FulfilClient, httpx_mock):
+    httpx_mock.add_response(status_code=403)
+    with pytest.raises(AuthError, match="Access forbidden"):
+        client.call("system.version")
+
+
+def test_call_404(client: FulfilClient, httpx_mock):
+    httpx_mock.add_response(status_code=404)
+    with pytest.raises(ServerError, match="not found"):
+        client.call("system.version")
+
+
+def test_call_500_with_detail(client: FulfilClient, httpx_mock):
+    httpx_mock.add_response(
+        status_code=500,
+        json={"message": "database connection lost"},
+    )
+    with pytest.raises(ServerError, match="database connection lost"):
+        client.call("system.version")
+
+
+def test_call_timeout(client: FulfilClient, httpx_mock):
+    httpx_mock.add_exception(httpx.ReadTimeout("timed out"))
+    with pytest.raises(NetworkError, match="timed out"):
+        client.call("system.version")
+
+
+def test_non_json_response(client: FulfilClient, httpx_mock):
+    httpx_mock.add_response(
+        status_code=200,
+        text="<html>Bad Gateway</html>",
+        headers={"content-type": "text/html"},
+    )
+    with pytest.raises(ServerError, match="Unexpected response"):
+        client.call("system.version")
+
+
+def test_call_positional_args(client: FulfilClient, httpx_mock):
+    """Positional args are sent as a JSON array."""
+    httpx_mock.add_response(json={"jsonrpc": "2.0", "result": "ok", "id": 1})
+    client.call("model.sale_order.serialize", [1, 2, 3])
+
+    body = json.loads(httpx_mock.get_request().content)
+    assert body["params"] == [[1, 2, 3]]
+
+
 def test_context_manager():
     client = FulfilClient(workspace="test.fulfil.io", api_key="sk_test")
     with client as c:

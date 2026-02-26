@@ -62,7 +62,7 @@ def _flatten(data: dict, prefix: str = "") -> list[tuple[str, str]]:
     for key, value in data.items():
         full_key = f"{prefix}{key}" if not prefix else f"{prefix}.{key}"
         if isinstance(value, dict):
-            items.extend(_flatten(value, f"{full_key}."))
+            items.extend(_flatten(value, full_key))
         else:
             items.append((full_key, str(value)))
     return items
