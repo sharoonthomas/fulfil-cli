@@ -107,6 +107,9 @@ fulfil sales_order get 1,2,3
 # Single record
 fulfil contact create --data '{"name": "Acme Corp"}'
 
+# Record with nested lines (e.g. contact with addresses)
+fulfil contact create --data '{"name": "Acme Corp", "addresses": [{"street": "100 Broadway", "city": "New York"}, {"street": "45 Industrial Pkwy", "city": "Newark"}]}'
+
 # Multiple records at once
 fulfil contact create --data '[{"name": "Alice"}, {"name": "Bob"}]'
 ```
@@ -115,7 +118,6 @@ fulfil contact create --data '[{"name": "Alice"}, {"name": "Bob"}]'
 
 ```bash
 fulfil sales_order update 42 --data '{"comment": "Approved by finance"}'
-fulfil sales_order update 1,2,3 --data '{"state": "confirmed"}'
 ```
 
 ### Deleting records
