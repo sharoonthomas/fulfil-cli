@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from typer.testing import CliRunner
 
 
 @pytest.fixture
@@ -38,5 +39,39 @@ def jsonrpc_error():
         if data:
             error["data"] = data
         return {"jsonrpc": "2.0", "error": error, "id": request_id}
+
+    return _make
+
+
+@pytest.fixture
+def cli_runner():
+    """Provide a Typer CliRunner instance."""
+    return CliRunner()
+
+
+@pytest.fixture
+def cli_env(monkeypatch):
+    """Set standard CLI env vars for testing."""
+    monkeypatch.setenv("FULFIL_API_KEY", "sk_test_key")
+    monkeypatch.setenv("FULFIL_WORKSPACE", "test.fulfil.io")
+
+
+@pytest.fixture
+def pagination_response():
+    """Factory for wrapping records in a pagination envelope."""
+
+    def _make(
+        records: list[dict],
+        *,
+        has_more: bool = False,
+        next_cursor: str | None = None,
+    ) -> dict:
+        return {
+            "data": records,
+            "pagination": {
+                "has_more": has_more,
+                "next_cursor": next_cursor,
+            },
+        }
 
     return _make
