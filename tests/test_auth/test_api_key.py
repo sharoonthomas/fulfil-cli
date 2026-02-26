@@ -29,9 +29,11 @@ class TestResolveApiKey:
 
     def test_keyring_returns_none_raises(self, monkeypatch):
         monkeypatch.delenv("FULFIL_API_KEY", raising=False)
-        with patch("fulfil_cli.auth.api_key.get_api_key", return_value=None):
-            with pytest.raises(AuthError, match="No API key"):
-                resolve_api_key(workspace="acme.fulfil.io")
+        with (
+            patch("fulfil_cli.auth.api_key.get_api_key", return_value=None),
+            pytest.raises(AuthError, match="No API key"),
+        ):
+            resolve_api_key(workspace="acme.fulfil.io")
 
     def test_no_workspace_no_keyring(self, monkeypatch):
         monkeypatch.delenv("FULFIL_API_KEY", raising=False)
@@ -48,9 +50,7 @@ class TestResolveApiKey:
 class TestResolveWorkspace:
     def test_flag_takes_priority(self, monkeypatch):
         monkeypatch.setenv("FULFIL_WORKSPACE", "env_ws.fulfil.io")
-        result = resolve_workspace(
-            workspace_flag="flag_ws", config_workspace="cfg.fulfil.io"
-        )
+        result = resolve_workspace(workspace_flag="flag_ws", config_workspace="cfg.fulfil.io")
         assert result == "flag_ws.fulfil.io"
 
     def test_env_var(self, monkeypatch):

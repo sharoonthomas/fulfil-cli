@@ -8,6 +8,7 @@ import sys
 from typing import Any
 
 import click
+import typer
 from rich.console import Console
 
 from fulfil_cli.cli.state import get_client, is_quiet
@@ -23,7 +24,7 @@ def _parse_json_arg(value: str, arg_name: str) -> Any:
         return json.loads(value)
     except json.JSONDecodeError as exc:
         console.print(f"[red]Invalid JSON for {arg_name}: {exc}[/red]")
-        sys.exit(7)
+        raise typer.Exit(code=7) from None
 
 
 def _parse_fields(value: str | None) -> list[str] | None:
@@ -39,7 +40,7 @@ def _parse_ids(value: str) -> list[int]:
         return [int(x.strip()) for x in value.split(",")]
     except ValueError:
         console.print("[red]IDs must be comma-separated integers.[/red]")
-        sys.exit(2)
+        raise typer.Exit(code=2) from None
 
 
 def _parse_order(value: str) -> dict[str, str]:
@@ -65,12 +66,9 @@ def _handle_error(exc: FulfilError, *, model: str | None = None) -> None:
     console.print(f"[red]Error ({model or 'fulfil'}): {exc}[/red]")
     if exc.hint:
         console.print(f"[dim]Hint: {exc.hint}[/dim]")
-    elif not is_quiet() and model:
-        if isinstance(exc, ValidationError):
-            console.print(
-                f"[dim]Hint: Run 'fulfil {model} describe' to see valid field names.[/dim]"
-            )
-    sys.exit(exc.exit_code)
+    elif not is_quiet() and model and isinstance(exc, ValidationError):
+        console.print(f"[dim]Hint: Run 'fulfil {model} describe' to see valid field names.[/dim]")
+    raise typer.Exit(code=exc.exit_code)
 
 
 def create_model_group(model_name: str) -> click.Group:
@@ -290,11 +288,11 @@ def create_model_group(model_name: str) -> click.Group:
                     "[red]Error: Delete requires confirmation. "
                     "Use --yes/-y to skip in non-interactive mode.[/red]"
                 )
-                sys.exit(2)
+                raise typer.Exit(code=2)
             id_list = ", ".join(str(i) for i in parsed_ids)
             if not click.confirm(f"Delete {len(parsed_ids)} record(s) from {model} ({id_list})?"):
                 console.print("[dim]Aborted.[/dim]")
-                sys.exit(0)
+                raise typer.Exit(code=0)
 
         try:
             client = get_client()
@@ -441,4 +439,4 @@ def _describe_endpoint(model_data: dict, model: str, endpoint_name: str, json_fl
             console.print(f"[dim]Did you mean: {', '.join(matches)}?[/dim]")
         else:
             console.print(f"[dim]Available: {', '.join(sorted(names))}[/dim]")
-    sys.exit(5)
+    raise typer.Exit(code=5)

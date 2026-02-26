@@ -24,7 +24,7 @@ def _parse_json_arg(value: str, arg_name: str) -> Any:
         return json.loads(value)
     except json.JSONDecodeError as exc:
         console.print(f"[red]Invalid JSON for {arg_name}: {exc}[/red]")
-        raise typer.Exit(code=7)
+        raise typer.Exit(code=7) from None
 
 
 def _handle_error(exc: FulfilError) -> None:

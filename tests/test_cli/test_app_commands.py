@@ -67,10 +67,18 @@ class TestModels:
 
     def test_list_models_with_search(self, httpx_mock, cli_env, jsonrpc_success):
         models = [
-            {"model_name": "sale_order", "description": "Sale Order", "category": "Sales",
-             "access": {}},
-            {"model_name": "product", "description": "Product", "category": "Products",
-             "access": {}},
+            {
+                "model_name": "sale_order",
+                "description": "Sale Order",
+                "category": "Sales",
+                "access": {},
+            },
+            {
+                "model_name": "product",
+                "description": "Product",
+                "category": "Products",
+                "access": {},
+            },
         ]
         httpx_mock.add_response(json=jsonrpc_success(models))
 

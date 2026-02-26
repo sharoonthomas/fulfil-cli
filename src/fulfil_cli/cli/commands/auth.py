@@ -42,7 +42,7 @@ def login(
         client.call("system.version")
     except FulfilError as exc:
         console.print(f"[red]Authentication failed: {exc}[/red]")
-        raise typer.Exit(code=exc.exit_code)
+        raise typer.Exit(code=exc.exit_code) from None
     except Exception:
         # If the v3 endpoint doesn't exist yet, store anyway with a warning
         console.print(
@@ -125,7 +125,7 @@ def token() -> None:
         key = resolve_api_key(workspace=workspace)
     except AuthError as exc:
         console.print(f"[red]{exc}[/red]", file=sys.stderr)
-        raise typer.Exit(code=exc.exit_code)
+        raise typer.Exit(code=exc.exit_code) from None
     print(key)
 
 

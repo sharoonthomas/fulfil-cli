@@ -36,11 +36,18 @@ dependencies = [
 [project.scripts]
 fulfil = "fulfil_cli.cli:main"
 
-[project.optional-dependencies]
+[project.urls]
+Homepage = "https://github.com/fulfilio/fulfil-cli"
+"Bug Tracker" = "https://github.com/fulfilio/fulfil-cli/issues"
+
+[dependency-groups]
 dev = [
     "pytest>=8.0.0",
     "pytest-httpx>=0.30.0",
+    "pytest-cov>=6.0.0",
+    "coverage[toml]>=7.0.0",
     "ruff>=0.4.0",
+    "pre-commit>=3.7.0",
 ]
 
 [tool.uv.build-backend]
@@ -49,10 +56,62 @@ module-name = "fulfil_cli"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "-ra",
+]
+xfail_strict = true
 
 [tool.ruff]
 target-version = "py310"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "N", "W", "UP"]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "N",    # pep8-naming
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "C4",   # flake8-comprehensions
+    "SIM",  # flake8-simplify
+    "RUF",  # ruff-specific
+    "PTH",  # flake8-use-pathlib
+    "PERF", # perflint
+    "ISC",  # implicit-str-concat
+]
+ignore = [
+    "B008",   # function-call-in-default-argument — Typer uses this pattern
+    "ISC001", # conflicts with ruff formatter
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = [
+    "S101",  # allow assert
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["fulfil_cli"]
+
+[tool.coverage.run]
+source = ["fulfil_cli"]
+branch = true
+parallel = true
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@(abc\\.)?abstractmethod",
+]
+
+[tool.coverage.paths]
+source = [
+    "src/",
+    "*/site-packages/",
+]

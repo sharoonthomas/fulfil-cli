@@ -41,7 +41,7 @@ def api_cmd(
         data = json.loads(payload)
     except json.JSONDecodeError as exc:
         console.print(f"[red]Invalid JSON: {exc}[/red]")
-        raise typer.Exit(code=7)
+        raise typer.Exit(code=7) from None
 
     # Extract method and params from JSON-RPC envelope or shorthand
     if "method" in data:
@@ -58,6 +58,6 @@ def api_cmd(
         console.print(f"[red]Error: {exc}[/red]")
         if exc.hint:
             console.print(f"[dim]Hint: {exc.hint}[/dim]")
-        raise typer.Exit(code=exc.exit_code)
+        raise typer.Exit(code=exc.exit_code) from None
 
     output(result, json_flag=json_flag)

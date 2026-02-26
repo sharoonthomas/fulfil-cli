@@ -26,12 +26,12 @@ class ConfigManager:
 
     def _load(self) -> None:
         if self._path.exists():
-            with open(self._path, "rb") as f:
+            with self._path.open("rb") as f:
                 self._data = tomllib.load(f)
 
     def _save(self) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self._path, "wb") as f:
+        with self._path.open("wb") as f:
             tomli_w.dump(self._data, f)
 
     def get(self, key: str, default: Any = None) -> Any:

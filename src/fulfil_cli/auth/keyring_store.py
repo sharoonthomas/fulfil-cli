@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import contextlib
+
 import keyring
 
 SERVICE_NAME = "fulfil-cli"
@@ -19,7 +21,5 @@ def get_api_key(workspace: str) -> str | None:
 
 def delete_api_key(workspace: str) -> None:
     """Delete an API key from the system keyring."""
-    try:
+    with contextlib.suppress(keyring.errors.PasswordDeleteError):
         keyring.delete_password(SERVICE_NAME, workspace)
-    except keyring.errors.PasswordDeleteError:
-        pass

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import sys
-
 import click
 import typer
 import typer.core
@@ -27,7 +25,7 @@ def _handle_error(exc: FulfilError) -> None:
     console.print(f"[red]Error: {exc}[/red]")
     if exc.hint and not is_quiet():
         console.print(f"[dim]Hint: {exc.hint}[/dim]")
-    sys.exit(exc.exit_code)
+    raise typer.Exit(code=exc.exit_code)
 
 
 class ReportGroup(click.Group):
@@ -244,3 +242,7 @@ def reports_list_cmd(ctx: click.Context, json_flag: bool) -> None:
 # Register standalone commands
 app.command(name="api")(api_cmd)
 app.command(name="completion")(completion_install)
+
+
+# Top-level aliases for frequently-used auth subcommands
+app.command(name="workspaces")(auth.workspaces)

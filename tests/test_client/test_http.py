@@ -7,7 +7,13 @@ import json
 import httpx
 import pytest
 
-from fulfil_cli.client.errors import AuthError, NetworkError, ServerError, ValidationError
+from fulfil_cli.client.errors import (
+    AuthError,
+    FulfilError,
+    NetworkError,
+    ServerError,
+    ValidationError,
+)
 from fulfil_cli.client.http import FulfilClient
 
 
@@ -95,7 +101,7 @@ def test_batch_with_error(client: FulfilClient, httpx_mock):
             {"jsonrpc": "2.0", "error": {"code": -32601, "message": "Not found"}, "id": 2},
         ]
     )
-    with pytest.raises(Exception):
+    with pytest.raises(FulfilError):
         client.batch(
             [
                 ("sales_order.count", {}),

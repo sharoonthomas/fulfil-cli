@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 
+import click
 import pytest
 from typer.testing import CliRunner
 
@@ -39,10 +40,10 @@ class TestParseIds:
     def test_multiple_ids(self):
         assert _parse_ids("1,2,3") == [1, 2, 3]
 
-    def test_invalid_raises_system_exit(self):
-        with pytest.raises(SystemExit) as exc_info:
+    def test_invalid_raises_exit(self):
+        with pytest.raises(click.exceptions.Exit) as exc_info:
             _parse_ids("abc")
-        assert exc_info.value.code == 2
+        assert exc_info.value.exit_code == 2
 
     def test_strips_whitespace(self):
         assert _parse_ids(" 1 , 2 ") == [1, 2]
@@ -92,9 +93,7 @@ class TestListCommand:
         assert body["params"]["page_size"] == 20
 
     def test_with_where(self, httpx_mock, cli_env, jsonrpc_success, pagination_response):
-        httpx_mock.add_response(
-            json=jsonrpc_success(pagination_response([{"id": 1}]))
-        )
+        httpx_mock.add_response(json=jsonrpc_success(pagination_response([{"id": 1}])))
 
         result = runner.invoke(
             app, ["sale_order", "list", "--where", '{"state": "confirmed"}', "--json"]
@@ -105,52 +104,36 @@ class TestListCommand:
         assert body["params"]["where"] == {"state": "confirmed"}
 
     def test_with_fields(self, httpx_mock, cli_env, jsonrpc_success, pagination_response):
-        httpx_mock.add_response(
-            json=jsonrpc_success(pagination_response([{"id": 1}]))
-        )
+        httpx_mock.add_response(json=jsonrpc_success(pagination_response([{"id": 1}])))
 
-        result = runner.invoke(
-            app, ["sale_order", "list", "--fields", "name,state", "--json"]
-        )
+        result = runner.invoke(app, ["sale_order", "list", "--fields", "name,state", "--json"])
         assert result.exit_code == 0
 
         body = json.loads(httpx_mock.get_request().content)
         assert body["params"]["fields"] == ["name", "state"]
 
     def test_with_order(self, httpx_mock, cli_env, jsonrpc_success, pagination_response):
-        httpx_mock.add_response(
-            json=jsonrpc_success(pagination_response([{"id": 1}]))
-        )
+        httpx_mock.add_response(json=jsonrpc_success(pagination_response([{"id": 1}])))
 
-        result = runner.invoke(
-            app, ["sale_order", "list", "--order", "date:desc,name", "--json"]
-        )
+        result = runner.invoke(app, ["sale_order", "list", "--order", "date:desc,name", "--json"])
         assert result.exit_code == 0
 
         body = json.loads(httpx_mock.get_request().content)
         assert body["params"]["ordering"] == {"date": "DESC", "name": "ASC"}
 
     def test_with_cursor(self, httpx_mock, cli_env, jsonrpc_success, pagination_response):
-        httpx_mock.add_response(
-            json=jsonrpc_success(pagination_response([{"id": 2}]))
-        )
+        httpx_mock.add_response(json=jsonrpc_success(pagination_response([{"id": 2}])))
 
-        result = runner.invoke(
-            app, ["sale_order", "list", "--cursor", "abc123", "--json"]
-        )
+        result = runner.invoke(app, ["sale_order", "list", "--cursor", "abc123", "--json"])
         assert result.exit_code == 0
 
         body = json.loads(httpx_mock.get_request().content)
         assert body["params"]["cursor"] == "abc123"
 
     def test_with_limit(self, httpx_mock, cli_env, jsonrpc_success, pagination_response):
-        httpx_mock.add_response(
-            json=jsonrpc_success(pagination_response([{"id": 1}]))
-        )
+        httpx_mock.add_response(json=jsonrpc_success(pagination_response([{"id": 1}])))
 
-        result = runner.invoke(
-            app, ["sale_order", "list", "--limit", "50", "--json"]
-        )
+        result = runner.invoke(app, ["sale_order", "list", "--limit", "50", "--json"])
         assert result.exit_code == 0
 
         body = json.loads(httpx_mock.get_request().content)
@@ -158,9 +141,7 @@ class TestListCommand:
 
     def test_bare_array_fallback(self, httpx_mock, cli_env, jsonrpc_success):
         """Servers returning a bare array instead of pagination envelope."""
-        httpx_mock.add_response(
-            json=jsonrpc_success([{"id": 1}, {"id": 2}])
-        )
+        httpx_mock.add_response(json=jsonrpc_success([{"id": 1}, {"id": 2}]))
 
         result = runner.invoke(app, ["sale_order", "list", "--json"])
         assert result.exit_code == 0
@@ -176,9 +157,7 @@ class TestListCommand:
 
 class TestGetCommand:
     def test_single_id(self, httpx_mock, cli_env, jsonrpc_success):
-        httpx_mock.add_response(
-            json=jsonrpc_success([{"id": 42, "name": "SO042"}])
-        )
+        httpx_mock.add_response(json=jsonrpc_success([{"id": 42, "name": "SO042"}]))
 
         result = runner.invoke(app, ["sale_order", "get", "42", "--json"])
         assert result.exit_code == 0
@@ -192,9 +171,7 @@ class TestGetCommand:
         assert body["params"] == [[42]]
 
     def test_multiple_ids(self, httpx_mock, cli_env, jsonrpc_success):
-        httpx_mock.add_response(
-            json=jsonrpc_success([{"id": 1}, {"id": 2}])
-        )
+        httpx_mock.add_response(json=jsonrpc_success([{"id": 1}, {"id": 2}]))
 
         result = runner.invoke(app, ["sale_order", "get", "1,2", "--json"])
         assert result.exit_code == 0
@@ -298,9 +275,7 @@ class TestCallCommand:
     def test_with_ids(self, httpx_mock, cli_env, jsonrpc_success):
         httpx_mock.add_response(json=jsonrpc_success(True))
 
-        result = runner.invoke(
-            app, ["sale_order", "call", "confirm", "--ids", "1,2,3", "--json"]
-        )
+        result = runner.invoke(app, ["sale_order", "call", "confirm", "--ids", "1,2,3", "--json"])
         assert result.exit_code == 0
 
         body = json.loads(httpx_mock.get_request().content)
@@ -326,9 +301,13 @@ class TestCallCommand:
         result = runner.invoke(
             app,
             [
-                "sale_order", "call", "process",
-                "--ids", "42",
-                "--data", '{"force": true}',
+                "sale_order",
+                "call",
+                "process",
+                "--ids",
+                "42",
+                "--data",
+                '{"force": true}',
                 "--json",
             ],
         )
@@ -388,9 +367,7 @@ class TestDescribeCommand:
 
 class TestErrorPaths:
     def test_server_error(self, httpx_mock, cli_env, jsonrpc_error):
-        httpx_mock.add_response(
-            json=jsonrpc_error(code=-32603, message="Internal error")
-        )
+        httpx_mock.add_response(json=jsonrpc_error(code=-32603, message="Internal error"))
 
         result = runner.invoke(app, ["sale_order", "list", "--json"])
         assert result.exit_code == 9

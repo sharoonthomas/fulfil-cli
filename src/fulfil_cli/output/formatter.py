@@ -24,9 +24,7 @@ def should_use_json() -> bool:
         return True
     if not sys.stdout.isatty():
         return True
-    if os.environ.get("CI"):
-        return True
-    return False
+    return bool(os.environ.get("CI"))
 
 
 def output(

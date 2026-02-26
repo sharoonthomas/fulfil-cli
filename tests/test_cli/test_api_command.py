@@ -52,9 +52,7 @@ class TestApiCommand:
         assert result.exit_code == 2
 
     def test_fulfil_error(self, httpx_mock, cli_env, jsonrpc_error):
-        httpx_mock.add_response(
-            json=jsonrpc_error(code=-32000, message="Auth failed")
-        )
+        httpx_mock.add_response(json=jsonrpc_error(code=-32000, message="Auth failed"))
 
         payload = json.dumps({"method": "system.whoami", "params": {}})
         result = runner.invoke(app, ["api", payload])

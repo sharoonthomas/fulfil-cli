@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 import typer
 from rich.console import Console
@@ -37,7 +38,7 @@ def completion_install() -> None:
             console.print(f"[red]Failed to install completion: {result.stderr}[/red]")
     except Exception as exc:
         console.print(f"[red]Error: {exc}[/red]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
 
 def _detect_shell() -> str | None:
@@ -54,7 +55,7 @@ def _detect_shell() -> str | None:
 
 def _completion_target(shell: str) -> str | None:
     """Return the typical completion file path for display."""
-    home = os.path.expanduser("~")
+    home = Path.home()
     if shell == "zsh":
         return f"{home}/.zfunc/_fulfil"
     if shell == "bash":
