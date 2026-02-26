@@ -1,0 +1,110 @@
+"""Tests for the JSON-RPC HTTP client."""
+
+from __future__ import annotations
+
+import json
+
+import httpx
+import pytest
+
+from fulfil_cli.client.errors import AuthError, NetworkError, ServerError, ValidationError
+from fulfil_cli.client.http import FulfilClient
+
+
+@pytest.fixture
+def client():
+    return FulfilClient(
+        workspace="test.fulfil.io",
+        api_key="sk_test_123",
+        base_url="https://test.fulfil.io",
+    )
+
+
+def test_client_url(client: FulfilClient):
+    assert client.url == "https://test.fulfil.io/api/v3/jsonrpc"
+
+
+def test_client_url_default():
+    c = FulfilClient(workspace="acme.fulfil.io", api_key="sk_test")
+    assert c.url == "https://acme.fulfil.io/api/v3/jsonrpc"
+
+
+def test_call_success(client: FulfilClient, httpx_mock):
+    httpx_mock.add_response(json={"jsonrpc": "2.0", "result": [{"id": 1, "name": "Test"}], "id": 1})
+    result = client.call("sales_order.find", where={"state": "draft"})
+    assert result == [{"id": 1, "name": "Test"}]
+
+    # Verify request payload
+    request = httpx_mock.get_request()
+    body = json.loads(request.content)
+    assert body["jsonrpc"] == "2.0"
+    assert body["method"] == "sales_order.find"
+    assert body["params"] == {"where": {"state": "draft"}}
+
+
+def test_call_jsonrpc_error(client: FulfilClient, httpx_mock):
+    httpx_mock.add_response(
+        json={
+            "jsonrpc": "2.0",
+            "error": {"code": -32602, "message": "Invalid params"},
+            "id": 1,
+        }
+    )
+    with pytest.raises(ValidationError, match="Invalid params"):
+        client.call("sales_order.find")
+
+
+def test_call_401(client: FulfilClient, httpx_mock):
+    httpx_mock.add_response(status_code=401)
+    with pytest.raises(AuthError, match="Invalid or expired API key"):
+        client.call("system.version")
+
+
+def test_call_500(client: FulfilClient, httpx_mock):
+    httpx_mock.add_response(status_code=500)
+    with pytest.raises(ServerError, match="Server error"):
+        client.call("system.version")
+
+
+def test_call_network_error(client: FulfilClient, httpx_mock):
+    httpx_mock.add_exception(httpx.ConnectError("Connection refused"))
+    with pytest.raises(NetworkError, match="Cannot connect"):
+        client.call("system.version")
+
+
+def test_batch_success(client: FulfilClient, httpx_mock):
+    httpx_mock.add_response(
+        json=[
+            {"jsonrpc": "2.0", "result": 5, "id": 1},
+            {"jsonrpc": "2.0", "result": 10, "id": 2},
+        ]
+    )
+    results = client.batch(
+        [
+            ("sales_order.count", {"where": {"state": "draft"}}),
+            ("sales_order.count", {"where": {"state": "processing"}}),
+        ]
+    )
+    assert results == [5, 10]
+
+
+def test_batch_with_error(client: FulfilClient, httpx_mock):
+    httpx_mock.add_response(
+        json=[
+            {"jsonrpc": "2.0", "result": 5, "id": 1},
+            {"jsonrpc": "2.0", "error": {"code": -32601, "message": "Not found"}, "id": 2},
+        ]
+    )
+    with pytest.raises(Exception):
+        client.batch(
+            [
+                ("sales_order.count", {}),
+                ("bad_model.count", {}),
+            ]
+        )
+
+
+def test_context_manager():
+    client = FulfilClient(workspace="test.fulfil.io", api_key="sk_test")
+    with client as c:
+        assert c is client
