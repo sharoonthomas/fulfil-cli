@@ -15,11 +15,13 @@ def store_api_key(workspace: str, api_key: str) -> None:
 
 
 def get_api_key(workspace: str) -> str | None:
-    """Retrieve an API key from the system keyring."""
-    return keyring.get_password(SERVICE_NAME, workspace)
+    """Retrieve an API key from the system keyring. Returns None if no keyring backend."""
+    with contextlib.suppress(keyring.errors.NoKeyringError):
+        return keyring.get_password(SERVICE_NAME, workspace)
+    return None
 
 
 def delete_api_key(workspace: str) -> None:
     """Delete an API key from the system keyring."""
-    with contextlib.suppress(keyring.errors.PasswordDeleteError):
+    with contextlib.suppress(keyring.errors.PasswordDeleteError, keyring.errors.NoKeyringError):
         keyring.delete_password(SERVICE_NAME, workspace)
