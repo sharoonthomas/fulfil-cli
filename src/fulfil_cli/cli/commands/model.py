@@ -175,8 +175,7 @@ def create_model_group(model_name: str) -> click.Group:
                         console.print(f"[dim]{count} records (more available)[/dim]")
                         if next_cursor:
                             console.print(
-                                f"[dim]Next page: fulfil {model} list"
-                                f" --cursor {next_cursor}[/dim]"
+                                f"[dim]Next page: fulfil {model} list --cursor {next_cursor}[/dim]"
                             )
                     else:
                         console.print(f"[dim]{count} records[/dim]")
