@@ -78,12 +78,12 @@ fulfil sales_order list --fields reference,state,total_amount
 
 # Filter with MongoDB-style queries
 fulfil sales_order list --where '{"state": "confirmed"}'
-fulfil sales_order list --where '{"total_amount": {"gte": 1000}}'
+fulfil sales_order list --where '{"sale_date": {"gte": "2025-01-01"}}'
 fulfil sales_order list --where '{"or": [{"state": "draft"}, {"state": "confirmed"}]}'
 
 # Sort results
 fulfil sales_order list --order sale_date:desc
-fulfil sales_order list --order total_amount:desc,reference:asc
+fulfil sales_order list --order sale_date:desc,reference:asc
 
 # Control page size
 fulfil sales_order list --limit 50

@@ -66,7 +66,7 @@ fulfil sales_order describe --json
 `gt`, `gte`, `lt`, `lte`, `ne`, `in`, `not_in`, `contains`, `startswith`, `endswith`
 
 ```bash
-fulfil sales_order list --where '{"total_amount": {"gte": 1000}}' --json
+fulfil sales_order list --where '{"sale_date": {"gte": "2025-01-01"}}' --json
 fulfil sales_order list --where '{"or": [{"state": "draft"}, {"state": "confirmed"}]}' --json
 ```
 
