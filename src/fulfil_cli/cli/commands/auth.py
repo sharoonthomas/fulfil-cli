@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sys
 
+import httpx
 import typer
 from rich.console import Console
 
@@ -37,7 +38,7 @@ def _login_api_key(workspace: str, api_key: str | None, config: ConfigManager) -
     except FulfilError as exc:
         console.print(f"[red]Authentication failed: {exc}[/red]")
         raise typer.Exit(code=exc.exit_code) from None
-    except Exception:
+    except httpx.HTTPError:
         console.print(
             "[yellow]Warning: Could not validate credentials "
             "(v3 API may not be deployed yet).[/yellow]"
@@ -59,7 +60,7 @@ def _login_oauth(workspace: str, config: ConfigManager) -> None:
 
     try:
         tokens = run_oauth_flow(workspace)
-    except Exception as exc:
+    except (RuntimeError, httpx.HTTPError) as exc:
         console.print(f"[red]OAuth login failed: {exc}[/red]")
         raise typer.Exit(code=1) from None
 
@@ -71,7 +72,7 @@ def _login_oauth(workspace: str, config: ConfigManager) -> None:
     except FulfilError as exc:
         console.print(f"[red]Authentication failed: {exc}[/red]")
         raise typer.Exit(code=exc.exit_code) from None
-    except Exception:
+    except httpx.HTTPError:
         console.print(
             "[yellow]Warning: Could not validate credentials "
             "(v3 API may not be deployed yet).[/yellow]"
