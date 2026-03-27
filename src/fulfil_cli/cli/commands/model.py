@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import difflib
-import json
 import sys
 from typing import Any
 
@@ -11,21 +10,12 @@ import click
 import typer
 from rich.console import Console
 
+from fulfil_cli.cli.commands.common import handle_error, parse_json_arg
 from fulfil_cli.cli.state import AppContext, format_option
-from fulfil_cli.client.errors import FulfilError, ValidationError
+from fulfil_cli.client.errors import FulfilError
 from fulfil_cli.output.formatter import output, output_model_describe
-from fulfil_cli.output.json_output import print_json
 
 console = Console(stderr=True)
-
-
-def _parse_json_arg(value: str, arg_name: str) -> Any:
-    """Parse a JSON string argument."""
-    try:
-        return json.loads(value)
-    except json.JSONDecodeError as exc:
-        console.print(f"[red]Invalid JSON for {arg_name}: {exc}[/red]")
-        raise typer.Exit(code=7) from None
 
 
 def _parse_fields(value: str | None) -> list[str] | None:
@@ -60,28 +50,6 @@ def _parse_order(value: str) -> dict[str, str]:
         else:
             result[part] = "ASC"
     return result
-
-
-def _handle_error(exc: FulfilError, *, model: str | None = None) -> None:
-    """Print error with contextual hints and exit."""
-    ctx = click.get_current_context(silent=True)
-    app_ctx: AppContext | None = ctx.obj if ctx else None
-
-    if app_ctx and app_ctx.get_effective_format() != "table":
-        err = exc.to_dict()
-        if model:
-            err["model"] = model
-        if not exc.hint and model and isinstance(exc, ValidationError):
-            err["hint"] = f"Run 'fulfil {model} describe' to see valid field names."
-        print_json(err, file=sys.stderr)
-        raise typer.Exit(code=exc.exit_code)
-
-    console.print(f"[red]Error ({model or 'fulfil'}): {exc}[/red]")
-    if exc.hint:
-        console.print(f"[dim]Hint: {exc.hint}[/dim]")
-    elif app_ctx and not app_ctx.quiet and model and isinstance(exc, ValidationError):
-        console.print(f"[dim]Hint: Run 'fulfil {model} describe' to see valid field names.[/dim]")
-    raise typer.Exit(code=exc.exit_code)
 
 
 def create_model_group(model_name: str) -> click.Group:
@@ -153,7 +121,7 @@ def create_model_group(model_name: str) -> click.Group:
         params: dict[str, Any] = {"page_size": page_size}
 
         if where:
-            params["where"] = _parse_json_arg(where, "--where")
+            params["where"] = parse_json_arg(where, "--where")
         if order:
             params["ordering"] = _parse_order(order)
         if fields_str:
@@ -165,7 +133,7 @@ def create_model_group(model_name: str) -> click.Group:
             client = app_ctx.get_client()
             result = client.call(f"model.{model_name}.find", **params)
         except FulfilError as exc:
-            _handle_error(exc, model=model_name)
+            handle_error(exc, context=model_name)
 
         # Handle envelope response: {"data": [...], "pagination": {...}}
         if isinstance(result, dict) and "data" in result and "pagination" in result:
@@ -205,7 +173,7 @@ def create_model_group(model_name: str) -> click.Group:
             client = app_ctx.get_client()
             result = client.call(f"model.{model_name}.serialize", parsed_ids)
         except FulfilError as exc:
-            _handle_error(exc, model=model_name)
+            handle_error(exc, context=model_name)
 
         if len(parsed_ids) == 1 and isinstance(result, list) and len(result) == 1:
             result = result[0]
@@ -228,14 +196,14 @@ def create_model_group(model_name: str) -> click.Group:
           cat records.json | fulfil contact create
         """
         app_ctx: AppContext = ctx.obj
-        parsed = _parse_json_arg(data.read(), "data")
+        parsed = parse_json_arg(data.read(), "data")
         vlist = parsed if isinstance(parsed, list) else [parsed]
 
         try:
             client = app_ctx.get_client()
             result = client.call(f"model.{model_name}.create", vlist=vlist)
         except FulfilError as exc:
-            _handle_error(exc, model=model_name)
+            handle_error(exc, context=model_name)
 
         output(result, fmt=app_ctx.get_effective_format(output_format))
 
@@ -257,13 +225,13 @@ def create_model_group(model_name: str) -> click.Group:
         """
         app_ctx: AppContext = ctx.obj
         parsed_ids = _parse_ids(ids)
-        values = _parse_json_arg(data.read(), "data")
+        values = parse_json_arg(data.read(), "data")
 
         try:
             client = app_ctx.get_client()
             result = client.call(f"model.{model_name}.update", ids=parsed_ids, values=values)
         except FulfilError as exc:
-            _handle_error(exc, model=model_name)
+            handle_error(exc, context=model_name)
 
         output(result, fmt=app_ctx.get_effective_format(output_format))
 
@@ -297,7 +265,7 @@ def create_model_group(model_name: str) -> click.Group:
             client = app_ctx.get_client()
             client.call(f"model.{model_name}.delete", ids=parsed_ids)
         except FulfilError as exc:
-            _handle_error(exc, model=model_name)
+            handle_error(exc, context=model_name)
 
         if not app_ctx.quiet:
             console.print(f"[green]Deleted {len(parsed_ids)} record(s).[/green]")
@@ -318,13 +286,13 @@ def create_model_group(model_name: str) -> click.Group:
         app_ctx: AppContext = ctx.obj
         params: dict[str, Any] = {}
         if where:
-            params["where"] = _parse_json_arg(where, "--where")
+            params["where"] = parse_json_arg(where, "--where")
 
         try:
             client = app_ctx.get_client()
             result = client.call(f"model.{model_name}.count", **params)
         except FulfilError as exc:
-            _handle_error(exc, model=model_name)
+            handle_error(exc, context=model_name)
 
         fmt = app_ctx.get_effective_format(output_format)
         if fmt != "table":
@@ -368,7 +336,7 @@ def create_model_group(model_name: str) -> click.Group:
         if ids:
             params["ids"] = _parse_ids(ids)
         if data:
-            extra = _parse_json_arg(data, "--data")
+            extra = parse_json_arg(data, "--data")
             if isinstance(extra, dict):
                 params.update(extra)
 
@@ -376,7 +344,7 @@ def create_model_group(model_name: str) -> click.Group:
             client = app_ctx.get_client()
             result = client.call(f"model.{model_name}.{method_name}", **params)
         except FulfilError as exc:
-            _handle_error(exc, model=model_name)
+            handle_error(exc, context=model_name)
 
         output(result, fmt=app_ctx.get_effective_format(output_format))
 
@@ -399,7 +367,7 @@ def create_model_group(model_name: str) -> click.Group:
             client = app_ctx.get_client()
             result = client.call("system.describe_model", model=model_name)
         except FulfilError as exc:
-            _handle_error(exc, model=model_name)
+            handle_error(exc, context=model_name)
 
         fmt = app_ctx.get_effective_format(output_format)
         if endpoint_name:
