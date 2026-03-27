@@ -11,7 +11,7 @@ import typer
 from rich.console import Console
 
 from fulfil_cli.cli.state import AppContext
-from fulfil_cli.client.errors import FulfilError, ValidationError
+from fulfil_cli.client.errors import EXIT_VALIDATION, FulfilError, ValidationError
 from fulfil_cli.output.json_output import print_json
 
 console = Console(stderr=True)
@@ -51,4 +51,4 @@ def parse_json_arg(value: str, arg_name: str) -> Any:
         return json.loads(value)
     except json.JSONDecodeError as exc:
         console.print(f"[red]Invalid JSON for {arg_name}: {exc}[/red]")
-        raise typer.Exit(code=7) from None
+        raise typer.Exit(code=EXIT_VALIDATION) from None

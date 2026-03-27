@@ -12,7 +12,7 @@ from rich.console import Console
 
 from fulfil_cli.cli.commands.common import handle_error, parse_json_arg
 from fulfil_cli.cli.state import AppContext, format_option
-from fulfil_cli.client.errors import FulfilError
+from fulfil_cli.client.errors import EXIT_NOT_FOUND, EXIT_OK, EXIT_USAGE, FulfilError
 from fulfil_cli.output.formatter import output, output_model_describe
 
 console = Console(stderr=True)
@@ -31,7 +31,7 @@ def _parse_ids(value: str) -> list[int]:
         return [int(x.strip()) for x in value.split(",")]
     except ValueError:
         console.print("[red]IDs must be comma-separated integers.[/red]")
-        raise typer.Exit(code=2) from None
+        raise typer.Exit(code=EXIT_USAGE) from None
 
 
 def _parse_order(value: str) -> dict[str, str]:
@@ -253,13 +253,13 @@ def create_model_group(model_name: str) -> click.Group:
                     "[red]Error: Delete requires confirmation. "
                     "Use --yes/-y to skip in non-interactive mode.[/red]"
                 )
-                raise typer.Exit(code=2)
+                raise typer.Exit(code=EXIT_USAGE)
             id_list = ", ".join(str(i) for i in parsed_ids)
             if not click.confirm(
                 f"Delete {len(parsed_ids)} record(s) from {model_name} ({id_list})?"
             ):
                 console.print("[dim]Aborted.[/dim]")
-                raise typer.Exit(code=0)
+                raise typer.Exit(code=EXIT_OK)
 
         try:
             client = app_ctx.get_client()
@@ -406,4 +406,4 @@ def _describe_endpoint(model_data: dict, model: str, endpoint_name: str, fmt: st
             console.print(f"[dim]Did you mean: {', '.join(matches)}?[/dim]")
         else:
             console.print(f"[dim]Available: {', '.join(sorted(names))}[/dim]")
-    raise typer.Exit(code=5)
+    raise typer.Exit(code=EXIT_NOT_FOUND)

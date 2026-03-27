@@ -10,7 +10,7 @@ from rich.console import Console
 
 from fulfil_cli.cli.commands.common import handle_error
 from fulfil_cli.cli.state import AppContext
-from fulfil_cli.client.errors import FulfilError
+from fulfil_cli.client.errors import EXIT_USAGE, EXIT_VALIDATION, FulfilError
 from fulfil_cli.output.formatter import output
 
 console = Console(stderr=True)
@@ -47,11 +47,11 @@ def api_cmd(
         data = json.loads(payload)
     except json.JSONDecodeError as exc:
         console.print(f"[red]Invalid JSON: {exc}[/red]")
-        raise typer.Exit(code=7) from None
+        raise typer.Exit(code=EXIT_VALIDATION) from None
 
     if "method" not in data:
         console.print("[red]JSON must contain a 'method' key.[/red]")
-        raise typer.Exit(code=2)
+        raise typer.Exit(code=EXIT_USAGE)
 
     method = data["method"]
     params = data.get("params", {})

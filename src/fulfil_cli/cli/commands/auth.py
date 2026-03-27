@@ -18,7 +18,7 @@ from fulfil_cli.auth.keyring_store import (
     store_api_key,
     store_oauth_tokens,
 )
-from fulfil_cli.client.errors import AuthError, FulfilError
+from fulfil_cli.client.errors import EXIT_CONFIG, EXIT_GENERAL, AuthError, FulfilError
 from fulfil_cli.client.http import FulfilClient
 from fulfil_cli.config.manager import ConfigManager
 
@@ -62,7 +62,7 @@ def _login_oauth(workspace: str, config: ConfigManager) -> None:
         tokens = run_oauth_flow(workspace)
     except (RuntimeError, httpx.HTTPError) as exc:
         console.print(f"[red]OAuth login failed: {exc}[/red]")
-        raise typer.Exit(code=1) from None
+        raise typer.Exit(code=EXIT_GENERAL) from None
 
     # Validate the token
     console.print(f"[dim]Validating credentials for {workspace}...[/dim]")
@@ -111,7 +111,7 @@ def login(
             _login_api_key(workspace, None, config)
         else:
             console.print(f"[red]Unknown auth method: {method}[/red]")
-            raise typer.Exit(code=1)
+            raise typer.Exit(code=EXIT_GENERAL)
         return
 
     # Interactive prompt
@@ -126,7 +126,7 @@ def login(
         _login_api_key(workspace, None, config)
     else:
         console.print("[red]Invalid choice.[/red]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=EXIT_GENERAL)
 
 
 @app.command()
@@ -172,7 +172,7 @@ def status() -> None:
     if not workspace:
         console.print("[yellow]Not logged in.[/yellow]")
         console.print("[dim]Run 'fulfil auth login' to authenticate.[/dim]")
-        raise typer.Exit(code=3)
+        raise typer.Exit(code=EXIT_CONFIG)
 
     auth_method = config.get_auth_method(workspace)
     env_key = "FULFIL_API_KEY" in os.environ
@@ -256,7 +256,7 @@ def use(
     if workspace not in config.workspaces:
         console.print(f"[red]Workspace '{workspace}' not found.[/red]")
         console.print("[dim]Run 'fulfil auth login' to add it first.[/dim]")
-        raise typer.Exit(code=3)
+        raise typer.Exit(code=EXIT_CONFIG)
 
     config.workspace = workspace
     console.print(f"[green]Switched to workspace '{workspace}'.[/green]")
