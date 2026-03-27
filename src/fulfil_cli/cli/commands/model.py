@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import difflib
 import sys
-from typing import Any
+from typing import IO, Any
 
 import click
 import typer
@@ -184,7 +184,7 @@ def create_model_group(model_name: str) -> click.Group:
     @click.argument("data", type=click.File("r"), default="-")
     @format_option
     @click.pass_context
-    def create_cmd(ctx: click.Context, data: Any, output_format: str | None) -> None:
+    def create_cmd(ctx: click.Context, data: IO[str], output_format: str | None) -> None:
         """Create new record(s). Returns the created record ID(s).
 
         \b
@@ -212,7 +212,7 @@ def create_model_group(model_name: str) -> click.Group:
     @click.argument("data", type=click.File("r"), default="-")
     @format_option
     @click.pass_context
-    def update_cmd(ctx: click.Context, ids: str, data: Any, output_format: str | None) -> None:
+    def update_cmd(ctx: click.Context, ids: str, data: IO[str], output_format: str | None) -> None:
         """Update record(s) by ID.
 
         \b

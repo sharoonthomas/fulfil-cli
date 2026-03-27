@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sys
-from typing import Any
+from typing import IO, Any
 
 import orjson
 
@@ -16,14 +16,13 @@ def dumps(data: Any, *, pretty: bool = False) -> str:
     return orjson.dumps(data, option=opts).decode()
 
 
-def print_json(data: Any, *, file: Any = None) -> None:
+def print_json(data: Any, *, file: IO[str] | None = None) -> None:
     """Print data as formatted JSON."""
-    file = file or sys.stdout
-    print(dumps(data, pretty=True), file=file)
+    print(dumps(data, pretty=True), file=file or sys.stdout)
 
 
-def print_ndjson(records: list[dict[str, Any]], *, file: Any = None) -> None:
+def print_ndjson(records: list[dict[str, Any]], *, file: IO[str] | None = None) -> None:
     """Print records as newline-delimited JSON (one per line)."""
-    file = file or sys.stdout
+    out = file or sys.stdout
     for record in records:
-        print(dumps(record), file=file)
+        print(dumps(record), file=out)
