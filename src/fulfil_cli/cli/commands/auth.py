@@ -8,7 +8,7 @@ import sys
 import typer
 from rich.console import Console
 
-from fulfil_cli.auth.api_key import resolve_credentials, resolve_workspace
+from fulfil_cli.auth.api_key import normalize_workspace, resolve_credentials, resolve_workspace
 from fulfil_cli.auth.keyring_store import (
     delete_api_key,
     delete_oauth_tokens,
@@ -23,12 +23,6 @@ from fulfil_cli.config.manager import ConfigManager
 
 app = typer.Typer(help="Manage authentication.")
 console = Console()
-
-
-def _normalize_workspace(workspace: str) -> str:
-    if "." not in workspace:
-        return f"{workspace}.fulfil.io"
-    return workspace
 
 
 def _login_api_key(workspace: str, api_key: str | None, config: ConfigManager) -> None:
@@ -101,7 +95,7 @@ def login(
 
     if not workspace:
         workspace = typer.prompt("Workspace domain (e.g. acme.fulfil.io)")
-    workspace = _normalize_workspace(workspace)
+    workspace = normalize_workspace(workspace)
 
     # If --api-key is provided, use API key method directly
     if api_key:
@@ -256,9 +250,7 @@ def use(
     """Switch the active workspace."""
     config = ConfigManager()
 
-    # Normalize
-    if "." not in workspace:
-        workspace = f"{workspace}.fulfil.io"
+    workspace = normalize_workspace(workspace)
 
     if workspace not in config.workspaces:
         console.print(f"[red]Workspace '{workspace}' not found.[/red]")

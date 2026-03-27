@@ -1,11 +1,13 @@
-"""API key resolution — env > flag > keyring."""
+"""Credential resolution — flag > env > keyring, with workspace normalization."""
 
 from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from typing import Literal
 
 from fulfil_cli.auth.keyring_store import get_api_key, get_oauth_tokens, store_oauth_tokens
+from fulfil_cli.auth.oauth import OAuthTokens, discover_oidc, refresh_access_token
 from fulfil_cli.client.errors import AuthError
 
 
@@ -13,40 +15,10 @@ from fulfil_cli.client.errors import AuthError
 class Credentials:
     """Resolved authentication credentials."""
 
-    method: str  # "api_key" or "oauth"
+    method: Literal["api_key", "oauth"]
     api_key: str | None = None
     access_token: str | None = None
     workspace: str | None = None
-
-
-def resolve_api_key(
-    *,
-    token_flag: str | None = None,
-    workspace: str | None = None,
-) -> str:
-    """Resolve API key from: --token flag > FULFIL_API_KEY env > keyring.
-
-    Raises AuthError if no key can be found.
-    """
-    # 1. Explicit --token flag
-    if token_flag:
-        return token_flag
-
-    # 2. Environment variable
-    env_key = os.environ.get("FULFIL_API_KEY")
-    if env_key:
-        return env_key
-
-    # 3. Keyring (requires workspace)
-    if workspace:
-        stored = get_api_key(workspace)
-        if stored:
-            return stored
-
-    raise AuthError(
-        message="No API key found",
-        hint="Run 'fulfil auth login' or set FULFIL_API_KEY environment variable.",
-    )
 
 
 def resolve_credentials(
@@ -57,23 +29,18 @@ def resolve_credentials(
 ) -> Credentials:
     """Resolve credentials, supporting both API key and OAuth.
 
-    Priority: --token flag → FULFIL_API_KEY env → check auth method → keyring.
+    Priority: --token flag > FULFIL_API_KEY env > check auth method > keyring.
     """
-    # 1. Explicit --token flag (always treated as API key)
     if token_flag:
         return Credentials(method="api_key", api_key=token_flag)
 
-    # 2. Environment variable
     env_key = os.environ.get("FULFIL_API_KEY")
     if env_key:
         return Credentials(method="api_key", api_key=env_key)
 
-    # 3. Based on configured auth method
     if auth_method == "oauth" and workspace:
         tokens_json = get_oauth_tokens(workspace)
         if tokens_json:
-            from fulfil_cli.auth.oauth import OAuthTokens, discover_oidc, refresh_access_token
-
             tokens = OAuthTokens.from_json(tokens_json)
             if tokens.is_expired and tokens.refresh_token:
                 oidc = discover_oidc(workspace)
@@ -85,7 +52,6 @@ def resolve_credentials(
                 workspace=workspace,
             )
 
-    # 4. Fall back to API key from keyring
     if workspace:
         stored = get_api_key(workspace)
         if stored:
@@ -108,11 +74,11 @@ def resolve_workspace(
     Raises AuthError if no workspace can be found.
     """
     if workspace_flag:
-        return _normalize_workspace(workspace_flag)
+        return normalize_workspace(workspace_flag)
 
     env_workspace = os.environ.get("FULFIL_WORKSPACE")
     if env_workspace:
-        return _normalize_workspace(env_workspace)
+        return normalize_workspace(env_workspace)
 
     if config_workspace:
         return config_workspace
@@ -123,7 +89,7 @@ def resolve_workspace(
     )
 
 
-def _normalize_workspace(value: str) -> str:
+def normalize_workspace(value: str) -> str:
     """Normalize workspace input — accept slug or full domain.
 
     'acme' → 'acme.fulfil.io'
