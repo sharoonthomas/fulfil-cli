@@ -13,17 +13,18 @@ export FULFIL_API_KEY=sk_live_...
 export FULFIL_WORKSPACE=acme.fulfil.io
 
 # Verify
-fulfil whoami --json
+fulfil whoami --format json
 ```
 
 ## Key Rules for Agents
 
-- **Always use `--json`** for structured output (auto-enabled when stdout is not a TTY)
+- **Always use `--format json`** for structured output (auto-enabled when stdout is not a TTY)
 - **Use env vars** for auth: `FULFIL_API_KEY`, `FULFIL_WORKSPACE` — no interactive prompts
-- **Set `FULFIL_JSON=1`** to force JSON even when stdout is a TTY
+- **Set `FULFIL_FORMAT=json`** to force JSON even when stdout is a TTY
 - **Errors go to stderr**, data to stdout — safe to parse stdout directly
 - **Exit codes** are structured: 0=ok, 2=usage, 3=config, 4=auth, 5=not-found, 6=forbidden, 7=validation, 8=rate-limit, 9=server, 10=network
 - **Never update state/status fields directly** — use workflow methods (`call confirm`, `call process`, etc.)
+- **Batch creates, not loops** — pass a JSON array to create multiple records in one call: `echo '[{...}, {...}]' | fulfil contact create`. Never loop single creates.
 
 ## Command Reference
 
@@ -31,34 +32,37 @@ fulfil whoami --json
 
 ```bash
 # List with filters, sorting, pagination
-fulfil sales_order list --where '{"state": "confirmed"}' --fields reference,state --order sale_date:desc --limit 50 --json
+fulfil sales_order list --where '{"state": "confirmed"}' --fields reference,state --order sale_date:desc --limit 50 --format json
 
 # Get by ID
-fulfil sales_order get 42 --json
-fulfil sales_order get 1,2,3 --json
+fulfil sales_order get 42 --format json
+fulfil sales_order get 1,2,3 --format json
 
-# Create (single or batch)
-fulfil contact create --data '{"name": "Acme Corp"}' --json
-fulfil contact create --data '[{"name": "Alice"}, {"name": "Bob"}]' --json
+# Create (single or batch, data from stdin)
+echo '{"name": "Acme Corp"}' | fulfil contact create --format json
+echo '[{"name": "Alice"}, {"name": "Bob"}]' | fulfil contact create --format json
 
 # Create with nested records
-fulfil contact create --data '{"name": "Acme Corp", "addresses": [{"street": "100 Broadway", "city": "New York"}]}' --json
+echo '{"name": "Acme Corp", "addresses": [{"street": "100 Broadway", "city": "New York"}]}' | fulfil contact create --format json
+
+# Create from a file
+fulfil contact create data.json --format json
 
 # Update data fields (not state — use call for workflow transitions)
-fulfil sales_order update 42 --data '{"comment": "Approved by finance"}' --json
+echo '{"comment": "Approved by finance"}' | fulfil sales_order update 42 --format json
 
 # Delete (requires --yes in non-interactive mode)
 fulfil sales_order delete 42 --yes
 
 # Count
-fulfil sales_order count --where '{"state": "draft"}' --json
+fulfil sales_order count --where '{"state": "draft"}' --format json
 
 # Call workflow methods
-fulfil sales_order call confirm --ids 1,2,3 --json
-fulfil sales_order call process --ids 42 --json
+fulfil sales_order call confirm --ids 1,2,3 --format json
+fulfil sales_order call process --ids 42 --format json
 
 # Describe model fields and endpoints
-fulfil sales_order describe --json
+fulfil sales_order describe --format json
 ```
 
 ### Filter Operators
@@ -66,8 +70,8 @@ fulfil sales_order describe --json
 `gt`, `gte`, `lt`, `lte`, `ne`, `in`, `not_in`, `contains`, `startswith`, `endswith`
 
 ```bash
-fulfil sales_order list --where '{"sale_date": {"gte": "2025-01-01"}}' --json
-fulfil sales_order list --where '{"or": [{"state": "draft"}, {"state": "confirmed"}]}' --json
+fulfil sales_order list --where '{"sale_date": {"gte": "2025-01-01"}}' --format json
+fulfil sales_order list --where '{"or": [{"state": "draft"}, {"state": "confirmed"}]}' --format json
 ```
 
 ### Pagination
@@ -81,36 +85,36 @@ The `list` command returns a pagination envelope:
 Use the cursor for the next page:
 
 ```bash
-fulfil sales_order list --cursor abc123 --json
+fulfil sales_order list --cursor abc123 --format json
 ```
 
 ### Discovery
 
 ```bash
 # List all models
-fulfil models --json
+fulfil models --format json
 
 # Search models
-fulfil models --search shipment --json
+fulfil models --search shipment --format json
 
 # List reports
-fulfil reports --json
+fulfil reports --format json
 
 # Describe a report's parameters
-fulfil reports price_list_report describe --json
+fulfil reports price_list_report describe --format json
 ```
 
 ### Other Commands
 
 ```bash
 # Raw JSON-RPC
-fulfil api '{"method": "system.version", "params": {}}' --json
+fulfil api '{"method": "system.version", "params": {}}' --format json
 
 # Auth
-fulfil whoami --json
+fulfil whoami --format json
 fulfil auth status
 fulfil workspaces
 
 # Version
-fulfil version --json
+fulfil version --format json
 ```

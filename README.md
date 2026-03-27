@@ -104,20 +104,23 @@ fulfil sales_order get 1,2,3
 ### Creating records
 
 ```bash
-# Single record
-fulfil contact create --data '{"name": "Acme Corp"}'
+# Single record (from stdin)
+echo '{"name": "Acme Corp"}' | fulfil contact create
 
 # Record with nested lines (e.g. contact with addresses)
-fulfil contact create --data '{"name": "Acme Corp", "addresses": [{"street": "100 Broadway", "city": "New York"}, {"street": "45 Industrial Pkwy", "city": "Newark"}]}'
+echo '{"name": "Acme Corp", "addresses": [{"street": "100 Broadway", "city": "New York"}, {"street": "45 Industrial Pkwy", "city": "Newark"}]}' | fulfil contact create
 
-# Multiple records at once
-fulfil contact create --data '[{"name": "Alice"}, {"name": "Bob"}]'
+# Multiple records at once (preferred — never loop single creates)
+echo '[{"name": "Alice"}, {"name": "Bob"}]' | fulfil contact create
+
+# From a file
+fulfil contact create data.json
 ```
 
 ### Updating records
 
 ```bash
-fulfil sales_order update 42 --data '{"comment": "Approved by finance"}'
+echo '{"comment": "Approved by finance"}' | fulfil sales_order update 42
 ```
 
 ### Deleting records
@@ -188,14 +191,17 @@ echo '{"method": "model.product.count", "params": {}}' | fulfil api -
 |---|---|
 | Terminal | Rich tables with colors |
 | Piped / redirected / CI | JSON (automatic) |
-| `--json` flag | JSON (forced) |
+| `--format` flag | table, json, csv, or ndjson |
 
 ```bash
 # Force JSON and pipe to jq
-fulfil sales_order list --fields reference,state --json | jq '.data[].reference'
+fulfil sales_order list --fields reference,state --format json | jq '.data[].reference'
 
-# Force JSON via env var
-FULFIL_JSON=1 fulfil sales_order list
+# Force format via env var
+FULFIL_FORMAT=json fulfil sales_order list
+
+# CSV output
+fulfil sales_order list --fields reference,state --format csv
 ```
 
 ## Configuration
@@ -215,7 +221,7 @@ Config file location: `~/.config/fulfil/config.toml`
 --workspace TEXT    Workspace domain (e.g. acme.fulfil.io)
 --debug            Show HTTP request/response details
 --quiet, -q        Suppress hints and decorative output
---json             Force JSON output
+--format TEXT      Output format: table, json, csv, ndjson
 -h, --help         Show help
 ```
 
@@ -244,7 +250,7 @@ fulfil completion   # auto-detects zsh/bash/fish
 
 The CLI is designed for programmatic use:
 
-- **JSON output by default** when stdout is piped or redirected
+- **JSON output by default** when stdout is piped or redirected (override with `--format` or `FULFIL_FORMAT`)
 - **Structured exit codes** for error handling
 - **Errors on stderr**, data on stdout — safe to parse stdout directly
 - **Environment variable auth** — no interactive prompts: `FULFIL_API_KEY` + `FULFIL_WORKSPACE`

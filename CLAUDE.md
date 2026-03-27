@@ -38,8 +38,8 @@ The CLI is built with **Typer** (on top of Click) and communicates with the Fulf
 - **`client/`** — `FulfilClient` in `http.py` handles JSON-RPC requests (single and batch). `errors.py` defines the error hierarchy (`FulfilError` base with `AuthError`, `NetworkError`, `ServerError`, etc.), each with an exit code.
 - **`auth/`** — API key resolution (`api_key.py`) with priority: CLI flag → env var → keyring. Keyring storage in `keyring_store.py`.
 - **`config/`** — TOML config management via `ConfigManager`. Uses `platformdirs` for XDG-compliant paths.
-- **`output/`** — Output formatting: `formatter.py` routes to JSON (`orjson`) or Rich tables based on `--json` flag / TTY detection.
-- **`cli/state.py`** — Global state module. `set_globals()` captures CLI flags from the root callback; `get_client()` lazily constructs a `FulfilClient` from resolved credentials.
+- **`output/`** — Output formatting: `formatter.py` routes to JSON (`orjson`), CSV, NDJSON, or Rich tables based on `--format` flag / TTY detection.
+- **`cli/state.py`** — `AppContext` dataclass stored on Click's `ctx.obj`. Holds auth credentials, output format, and a lazily-constructed `FulfilClient`.
 
 **Key pattern**: The `FulfilGroup.get_command()` override is the central routing mechanism — it checks static commands first, then intercepts `report` as a special group, and finally treats any other name as a Fulfil model.
 
