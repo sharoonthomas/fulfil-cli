@@ -44,7 +44,7 @@ def config_get(
     if fmt != "table":
         output({key: value}, fmt=fmt)
     else:
-        print(value)
+        typer.echo(value)
 
 
 @app.command("list")
