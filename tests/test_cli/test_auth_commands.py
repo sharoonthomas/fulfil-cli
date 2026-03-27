@@ -12,15 +12,6 @@ from fulfil_cli.cli.app import app
 runner = CliRunner()
 
 
-@pytest.fixture(autouse=True)
-def _reset_state():
-    from fulfil_cli.cli import state
-
-    state.set_globals()
-    yield
-    state.set_globals()
-
-
 @pytest.fixture
 def tmp_config(tmp_path):
     """Provide a ConfigManager backed by a temp file."""

@@ -1,89 +1,106 @@
-"""Global CLI state — resolves client from config/env/flags."""
+"""Application context — Click-idiomatic state via ctx.obj."""
 
 from __future__ import annotations
 
+import os
+import sys
+from dataclasses import dataclass, field
+
+import click
+
 from fulfil_cli.auth.api_key import resolve_credentials, resolve_workspace
+from fulfil_cli.auth.keyring_store import get_oauth_tokens, store_oauth_tokens
+from fulfil_cli.auth.oauth import OAuthTokens, discover_oidc, refresh_access_token
 from fulfil_cli.client.http import FulfilClient
 from fulfil_cli.config.manager import ConfigManager
 
-# Module-level state set by the root callback
-_token: str | None = None
-_workspace_flag: str | None = None
-_base_url: str | None = None
-_debug: bool = False
-_quiet: bool = False
 
-# Cached client
-_client: FulfilClient | None = None
+@dataclass
+class AppContext:
+    """CLI application context, stored in Click's ctx.obj."""
+
+    token: str | None = None
+    workspace: str | None = None
+    base_url: str | None = None
+    debug: bool = False
+    quiet: bool = False
+    output_format: str | None = None
+    _client: FulfilClient | None = field(default=None, repr=False, init=False)
+
+    def get_effective_format(self, override: str | None = None) -> str:
+        """Resolve output format from --format, env, and TTY detection.
+
+        Priority: command --format > root --format > FULFIL_FORMAT env > non-TTY > CI env > table.
+        """
+        if override:
+            return override
+        if self.output_format:
+            return self.output_format
+        fmt_env = os.environ.get("FULFIL_FORMAT", "").lower()
+        if fmt_env in ("table", "json", "csv", "ndjson"):
+            return fmt_env
+        if not sys.stdout.isatty():
+            return "json"
+        if os.environ.get("CI"):
+            return "json"
+        return "table"
+
+    def get_client(self) -> FulfilClient:
+        """Get or create the FulfilClient from resolved credentials."""
+        if self._client is not None:
+            return self._client
+
+        config = ConfigManager()
+        workspace = resolve_workspace(
+            workspace_flag=self.workspace,
+            config_workspace=config.workspace,
+        )
+        auth_method = config.get_auth_method(workspace)
+        creds = resolve_credentials(
+            token_flag=self.token, workspace=workspace, auth_method=auth_method
+        )
+
+        token_refresher = None
+        if creds.method == "oauth":
+
+            def _refresh() -> str:
+                tokens_json = get_oauth_tokens(workspace)
+                if not tokens_json:
+                    raise RuntimeError("No OAuth tokens found for refresh")
+                tokens = OAuthTokens.from_json(tokens_json)
+                if not tokens.refresh_token:
+                    raise RuntimeError("No refresh token available")
+                oidc = discover_oidc(workspace)
+                new_tokens = refresh_access_token(oidc["token_endpoint"], tokens.refresh_token)
+                store_oauth_tokens(workspace, new_tokens.to_json().decode())
+                return new_tokens.access_token
+
+            token_refresher = _refresh
+
+        self._client = FulfilClient(
+            workspace=workspace,
+            api_key=creds.api_key,
+            access_token=creds.access_token,
+            token_refresher=token_refresher,
+            base_url=self.base_url,
+            debug=self.debug,
+        )
+        return self._client
 
 
-def set_globals(
-    *,
-    token: str | None = None,
-    workspace: str | None = None,
-    base_url: str | None = None,
-    debug: bool = False,
-    quiet: bool = False,
-) -> None:
-    """Set global state from root CLI callback."""
-    global _token, _workspace_flag, _base_url, _debug, _quiet, _client
-    _token = token
-    _workspace_flag = workspace
-    _base_url = base_url
-    _debug = debug
-    _quiet = quiet
-    _client = None  # Reset cached client
+def get_app_ctx() -> AppContext:
+    """Get AppContext from the current Click context."""
+    return click.get_current_context().obj
 
 
-def is_debug() -> bool:
-    """Return whether debug mode is enabled."""
-    return _debug
+VALID_FORMATS = ("table", "json", "csv", "ndjson")
 
-
-def is_quiet() -> bool:
-    """Return whether quiet mode is enabled."""
-    return _quiet
-
-
-def get_client() -> FulfilClient:
-    """Get or create the FulfilClient from resolved credentials."""
-    global _client
-    if _client is not None:
-        return _client
-
-    config = ConfigManager()
-    workspace = resolve_workspace(
-        workspace_flag=_workspace_flag,
-        config_workspace=config.workspace,
-    )
-    auth_method = config.get_auth_method(workspace)
-    creds = resolve_credentials(token_flag=_token, workspace=workspace, auth_method=auth_method)
-
-    token_refresher = None
-    if creds.method == "oauth":
-
-        def _refresh() -> str:
-            from fulfil_cli.auth.keyring_store import get_oauth_tokens, store_oauth_tokens
-            from fulfil_cli.auth.oauth import OAuthTokens, discover_oidc, refresh_access_token
-
-            tokens_json = get_oauth_tokens(workspace)
-            if not tokens_json:
-                raise RuntimeError("No OAuth tokens found for refresh")
-            tokens = OAuthTokens.from_json(tokens_json)
-            if not tokens.refresh_token:
-                raise RuntimeError("No refresh token available")
-            oidc = discover_oidc(workspace)
-            new_tokens = refresh_access_token(oidc["token_endpoint"], tokens.refresh_token)
-            store_oauth_tokens(workspace, new_tokens.to_json().decode())
-            return new_tokens.access_token
-
-        token_refresher = _refresh
-
-    _client = FulfilClient(
-        workspace=workspace,
-        api_key=creds.api_key,
-        access_token=creds.access_token,
-        token_refresher=token_refresher,
-        base_url=_base_url,
-    )
-    return _client
+format_option = click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(VALID_FORMATS, case_sensitive=False),
+    default=None,
+    expose_value=True,
+    is_eager=False,
+    help="Output format (default: table for TTY, json when piped)",
+)

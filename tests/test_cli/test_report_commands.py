@@ -4,22 +4,12 @@ from __future__ import annotations
 
 import json
 
-import pytest
 from typer.testing import CliRunner
 
 from fulfil_cli.cli.app import app
 from fulfil_cli.cli.commands.report import _extract_properties
 
 runner = CliRunner()
-
-
-@pytest.fixture(autouse=True)
-def _reset_state():
-    from fulfil_cli.cli import state
-
-    state.set_globals()
-    yield
-    state.set_globals()
 
 
 class TestExtractProperties:
@@ -48,7 +38,7 @@ class TestReportExecute:
 
         result = runner.invoke(
             app,
-            ["reports", "sales_report", "execute", "--params", '{"year": 2024}', "--json"],
+            ["reports", "sales_report", "execute", "--params", '{"year": 2024}'],
         )
         assert result.exit_code == 0
 
@@ -59,7 +49,7 @@ class TestReportExecute:
     def test_execute_no_params(self, httpx_mock, cli_env, jsonrpc_success):
         httpx_mock.add_response(json=jsonrpc_success({"columns": [], "data": []}))
 
-        result = runner.invoke(app, ["reports", "sales_report", "execute", "--json"])
+        result = runner.invoke(app, ["reports", "sales_report", "execute"])
         assert result.exit_code == 0
 
     def test_execute_invalid_json(self, cli_env):
@@ -69,16 +59,14 @@ class TestReportExecute:
     def test_execute_server_error(self, httpx_mock, cli_env, jsonrpc_error):
         httpx_mock.add_response(json=jsonrpc_error(code=-32603, message="Report failed"))
 
-        result = runner.invoke(app, ["reports", "sales_report", "execute", "--json"])
+        result = runner.invoke(app, ["reports", "sales_report", "execute"])
         assert result.exit_code == 9
 
     def test_default_action_is_execute(self, httpx_mock, cli_env, jsonrpc_success):
         """Invoking a report group without subcommand defaults to execute."""
         httpx_mock.add_response(json=jsonrpc_success({"columns": [], "data": []}))
 
-        result = runner.invoke(
-            app, ["reports", "sales_report", "--params", '{"year": 2024}', "--json"]
-        )
+        result = runner.invoke(app, ["reports", "sales_report", "--params", '{"year": 2024}'])
         assert result.exit_code == 0
 
         body = json.loads(httpx_mock.get_request().content)
@@ -95,7 +83,7 @@ class TestReportDescribe:
         }
         httpx_mock.add_response(json=jsonrpc_success(schema))
 
-        result = runner.invoke(app, ["reports", "sales_report", "describe", "--json"])
+        result = runner.invoke(app, ["reports", "sales_report", "describe"])
         assert result.exit_code == 0
 
         data = json.loads(result.stdout)

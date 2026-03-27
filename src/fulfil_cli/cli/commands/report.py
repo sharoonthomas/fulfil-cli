@@ -11,9 +11,10 @@ import typer
 from rich.console import Console
 from rich.prompt import Confirm, IntPrompt, Prompt
 
-from fulfil_cli.cli.state import get_client
+from fulfil_cli.cli.state import AppContext, format_option
 from fulfil_cli.client.errors import FulfilError, ValidationError
 from fulfil_cli.output.formatter import output_describe, output_report
+from fulfil_cli.output.json_output import print_json
 
 console = Console(stderr=True)
 
@@ -29,6 +30,11 @@ def _parse_json_arg(value: str, arg_name: str) -> Any:
 
 def _handle_error(exc: FulfilError) -> None:
     """Print error and exit with appropriate code."""
+    ctx = click.get_current_context(silent=True)
+    app_ctx: AppContext | None = ctx.obj if ctx else None
+    if app_ctx and app_ctx.get_effective_format() != "table":
+        print_json(exc.to_dict(), file=sys.stderr)
+        raise typer.Exit(code=exc.exit_code)
     console.print(f"[red]Error: {exc}[/red]")
     if exc.hint:
         console.print(f"[dim]Hint: {exc.hint}[/dim]")
@@ -115,7 +121,6 @@ def create_report_group(report_name: str) -> click.Group:
             """Example: '{"date_from": "2024-01-01", "date_to": "2024-12-31", "warehouse": 1}'"""
         ),
     )
-    @click.option("--json", "json_flag", is_flag=True, help="Output as JSON")
     @click.option(
         "-i",
         "--interactive",
@@ -126,18 +131,18 @@ def create_report_group(report_name: str) -> click.Group:
             "Use 'describe' subcommand to see the schema without executing."
         ),
     )
+    @format_option
     @click.pass_context
     def report_group(
         ctx: click.Context,
         params: str | None,
-        json_flag: bool,
         interactive: bool,
+        output_format: str | None,
     ) -> None:
-        ctx.ensure_object(dict)
-        ctx.obj["report"] = report_name
-        # Default to execute when no subcommand is given
         if ctx.invoked_subcommand is None:
-            ctx.invoke(execute_cmd, params=params, json_flag=json_flag, interactive=interactive)
+            ctx.invoke(
+                execute_cmd, params=params, interactive=interactive, output_format=output_format
+            )
 
     @report_group.command("execute")
     @click.option(
@@ -148,7 +153,6 @@ def create_report_group(report_name: str) -> click.Group:
             """Example: '{"date_from": "2024-01-01", "date_to": "2024-12-31"}'"""
         ),
     )
-    @click.option("--json", "json_flag", is_flag=True, help="Output as JSON")
     @click.option(
         "-i",
         "--interactive",
@@ -159,25 +163,26 @@ def create_report_group(report_name: str) -> click.Group:
             "Use 'describe' subcommand to see the schema without executing."
         ),
     )
+    @format_option
     @click.pass_context
     def execute_cmd(
         ctx: click.Context,
         params: str | None,
-        json_flag: bool,
         interactive: bool,
+        output_format: str | None,
     ) -> None:
         """Execute the report with given parameters."""
-        report = ctx.obj["report"]
+        app_ctx: AppContext = ctx.obj
         parsed: dict[str, Any] = {}
         if params:
             parsed = _parse_json_arg(params, "--params")
 
-        client = get_client()
+        client = app_ctx.get_client()
 
         # Interactive mode: fetch describe and prompt before executing
         if interactive and sys.stderr.isatty():
             try:
-                describe = client.call(f"report.{report}.describe")
+                describe = client.call(f"report.{report_name}.describe")
             except FulfilError as exc:
                 _handle_error(exc)
             properties = _extract_properties(describe)
@@ -185,13 +190,13 @@ def create_report_group(report_name: str) -> click.Group:
                 parsed = _prompt_params(properties, parsed)
 
         try:
-            result = client.call(f"report.{report}.execute", **parsed)
+            result = client.call(f"report.{report_name}.execute", **parsed)
         except ValidationError as exc:
             # Reactive mode: on validation error, prompt and retry if TTY
             if sys.stderr.isatty():
                 console.print(f"[yellow]Validation error: {exc}[/yellow]")
                 try:
-                    describe = client.call(f"report.{report}.describe")
+                    describe = client.call(f"report.{report_name}.describe")
                 except FulfilError:
                     _handle_error(exc)
                 properties = _extract_properties(describe)
@@ -199,7 +204,7 @@ def create_report_group(report_name: str) -> click.Group:
                     console.print()
                     parsed = _prompt_params(properties, parsed)
                     try:
-                        result = client.call(f"report.{report}.execute", **parsed)
+                        result = client.call(f"report.{report_name}.execute", **parsed)
                     except FulfilError as retry_exc:
                         _handle_error(retry_exc)
                 else:
@@ -209,21 +214,21 @@ def create_report_group(report_name: str) -> click.Group:
         except FulfilError as exc:
             _handle_error(exc)
 
-        output_report(result, json_flag=json_flag)
+        output_report(result, fmt=app_ctx.get_effective_format(output_format))
 
     @report_group.command("describe")
-    @click.option("--json", "json_flag", is_flag=True, help="Output as JSON")
+    @format_option
     @click.pass_context
-    def describe_cmd(ctx: click.Context, json_flag: bool) -> None:
+    def describe_cmd(ctx: click.Context, output_format: str | None) -> None:
         """Show the report's parameter description."""
-        report = ctx.obj["report"]
+        app_ctx: AppContext = ctx.obj
 
         try:
-            client = get_client()
-            result = client.call(f"report.{report}.describe")
+            client = app_ctx.get_client()
+            result = client.call(f"report.{report_name}.describe")
         except FulfilError as exc:
             _handle_error(exc)
 
-        output_describe(result, json_flag=json_flag, title=report)
+        output_describe(result, fmt=app_ctx.get_effective_format(output_format), title=report_name)
 
     return report_group

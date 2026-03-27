@@ -11,9 +11,10 @@ import click
 import typer
 from rich.console import Console
 
-from fulfil_cli.cli.state import get_client, is_quiet
+from fulfil_cli.cli.state import AppContext, format_option
 from fulfil_cli.client.errors import FulfilError, ValidationError
-from fulfil_cli.output.formatter import output, output_model_describe, should_use_json
+from fulfil_cli.output.formatter import output, output_model_describe
+from fulfil_cli.output.json_output import print_json
 
 console = Console(stderr=True)
 
@@ -63,10 +64,22 @@ def _parse_order(value: str) -> dict[str, str]:
 
 def _handle_error(exc: FulfilError, *, model: str | None = None) -> None:
     """Print error with contextual hints and exit."""
+    ctx = click.get_current_context(silent=True)
+    app_ctx: AppContext | None = ctx.obj if ctx else None
+
+    if app_ctx and app_ctx.get_effective_format() != "table":
+        err = exc.to_dict()
+        if model:
+            err["model"] = model
+        if not exc.hint and model and isinstance(exc, ValidationError):
+            err["hint"] = f"Run 'fulfil {model} describe' to see valid field names."
+        print_json(err, file=sys.stderr)
+        raise typer.Exit(code=exc.exit_code)
+
     console.print(f"[red]Error ({model or 'fulfil'}): {exc}[/red]")
     if exc.hint:
         console.print(f"[dim]Hint: {exc.hint}[/dim]")
-    elif not is_quiet() and model and isinstance(exc, ValidationError):
+    elif app_ctx and not app_ctx.quiet and model and isinstance(exc, ValidationError):
         console.print(f"[dim]Hint: Run 'fulfil {model} describe' to see valid field names.[/dim]")
     raise typer.Exit(code=exc.exit_code)
 
@@ -77,8 +90,7 @@ def create_model_group(model_name: str) -> click.Group:
     @click.group(name=model_name, help=f"Interact with {model_name} records.")
     @click.pass_context
     def model_group(ctx: click.Context) -> None:
-        ctx.ensure_object(dict)
-        ctx.obj["model"] = model_name
+        pass
 
     @model_group.command("list")
     @click.option(
@@ -115,7 +127,7 @@ def create_model_group(model_name: str) -> click.Group:
     @click.option(
         "--page-size", "--limit", default=20, type=int, help="Records per page (default: 20)"
     )
-    @click.option("--json", "json_flag", is_flag=True, help="Output as JSON")
+    @format_option
     @click.pass_context
     def list_cmd(
         ctx: click.Context,
@@ -124,7 +136,7 @@ def create_model_group(model_name: str) -> click.Group:
         order: str | None,
         cursor: str | None,
         page_size: int,
-        json_flag: bool,
+        output_format: str | None,
     ) -> None:
         """List records matching filters.
 
@@ -136,7 +148,8 @@ def create_model_group(model_name: str) -> click.Group:
           fulfil sales_order list --order sale_date:desc --limit 50
           fulfil sales_order list --cursor <token>
         """
-        model = ctx.obj["model"]
+        app_ctx: AppContext = ctx.obj
+        fmt = app_ctx.get_effective_format(output_format)
         params: dict[str, Any] = {"page_size": page_size}
 
         if where:
@@ -148,26 +161,22 @@ def create_model_group(model_name: str) -> click.Group:
         if cursor:
             params["cursor"] = cursor
 
-        client = get_client()
-
         try:
-            result = client.call(f"model.{model}.find", **params)
+            client = app_ctx.get_client()
+            result = client.call(f"model.{model_name}.find", **params)
         except FulfilError as exc:
-            _handle_error(exc, model=model)
-
-        # Determine if output will be JSON (explicit flag or auto-detected)
-        use_json = json_flag or should_use_json()
+            _handle_error(exc, model=model_name)
 
         # Handle envelope response: {"data": [...], "pagination": {...}}
         if isinstance(result, dict) and "data" in result and "pagination" in result:
             records = result["data"]
             pagination = result["pagination"]
 
-            if use_json:
-                output(result, json_flag=True)
+            if fmt != "table":
+                output(result, fmt=fmt)
             else:
-                output(records, json_flag=False, title=model)
-                if not is_quiet() and pagination:
+                output(records, fmt="table", title=model_name)
+                if not app_ctx.quiet and pagination:
                     count = len(records)
                     next_cursor = pagination.get("next_cursor")
                     has_more = pagination.get("has_more", next_cursor is not None)
@@ -175,102 +184,88 @@ def create_model_group(model_name: str) -> click.Group:
                         console.print(f"[dim]{count} records (more available)[/dim]")
                         if next_cursor:
                             console.print(
-                                f"[dim]Next page: fulfil {model} list --cursor {next_cursor}[/dim]"
+                                f"[dim]Next page: fulfil {model_name} list"
+                                f" --cursor {next_cursor}[/dim]"
                             )
                     else:
                         console.print(f"[dim]{count} records[/dim]")
         else:
-            # Fallback for servers that still return bare arrays
-            output(result, json_flag=json_flag, title=model)
+            output(result, fmt=fmt, title=model_name)
 
     @model_group.command("get")
     @click.argument("ids", type=str)
-    @click.option("--json", "json_flag", is_flag=True, help="Output as JSON")
+    @format_option
     @click.pass_context
-    def get_cmd(
-        ctx: click.Context,
-        ids: str,
-        json_flag: bool,
-    ) -> None:
+    def get_cmd(ctx: click.Context, ids: str, output_format: str | None) -> None:
         """Get records by ID(s). IDS is one or more comma-separated integers (e.g. 123 or 1,2,3)."""
-        model = ctx.obj["model"]
+        app_ctx: AppContext = ctx.obj
         parsed_ids = _parse_ids(ids)
 
         try:
-            client = get_client()
-            result = client.call(f"model.{model}.serialize", parsed_ids)
+            client = app_ctx.get_client()
+            result = client.call(f"model.{model_name}.serialize", parsed_ids)
         except FulfilError as exc:
-            _handle_error(exc, model=model)
+            _handle_error(exc, model=model_name)
 
-        # Single ID → single record output
         if len(parsed_ids) == 1 and isinstance(result, list) and len(result) == 1:
             result = result[0]
 
-        output(result, json_flag=json_flag, title=model)
+        output(result, fmt=app_ctx.get_effective_format(output_format), title=model_name)
 
     @model_group.command("create")
-    @click.option(
-        "--data",
-        required=True,
-        help=(
-            "Record data as a JSON object or array of objects. "
-            'Example: \'{"name": "Test", "code": "T001"}\' or '
-            '\'[{"name": "A"}, {"name": "B"}]\''
-        ),
-    )
-    @click.option("--json", "json_flag", is_flag=True, help="Output as JSON")
+    @click.argument("data", type=click.File("r"), default="-")
+    @format_option
     @click.pass_context
-    def create_cmd(
-        ctx: click.Context,
-        data: str,
-        json_flag: bool,
-    ) -> None:
-        """Create new record(s). Returns the created record ID(s)."""
-        model = ctx.obj["model"]
-        parsed = _parse_json_arg(data, "--data")
+    def create_cmd(ctx: click.Context, data: Any, output_format: str | None) -> None:
+        """Create new record(s). Returns the created record ID(s).
+
+        \b
+        DATA is a file path or '-' for stdin (default: stdin).
+
+        Examples:
+          echo '{"name": "Test"}' | fulfil contact create
+          fulfil contact create records.json
+          cat records.json | fulfil contact create
+        """
+        app_ctx: AppContext = ctx.obj
+        parsed = _parse_json_arg(data.read(), "data")
         vlist = parsed if isinstance(parsed, list) else [parsed]
 
         try:
-            client = get_client()
-            result = client.call(f"model.{model}.create", vlist=vlist)
+            client = app_ctx.get_client()
+            result = client.call(f"model.{model_name}.create", vlist=vlist)
         except FulfilError as exc:
-            _handle_error(exc, model=model)
+            _handle_error(exc, model=model_name)
 
-        output(result, json_flag=json_flag)
+        output(result, fmt=app_ctx.get_effective_format(output_format))
 
     @model_group.command("update")
     @click.argument("ids", type=str)
-    @click.option(
-        "--data",
-        required=True,
-        help=(
-            "JSON object with fields to update. "
-            'Example: \'{"state": "confirmed", "comment": "Approved"}\''
-        ),
-    )
-    @click.option("--json", "json_flag", is_flag=True, help="Output as JSON")
+    @click.argument("data", type=click.File("r"), default="-")
+    @format_option
     @click.pass_context
-    def update_cmd(
-        ctx: click.Context,
-        ids: str,
-        data: str,
-        json_flag: bool,
-    ) -> None:
+    def update_cmd(ctx: click.Context, ids: str, data: Any, output_format: str | None) -> None:
         """Update record(s) by ID.
 
+        \b
         IDS is one or more comma-separated integers (e.g. 42 or 1,2,3).
+        DATA is a file path or '-' for stdin (default: stdin).
+
+        Examples:
+          echo '{"name": "Updated"}' | fulfil contact update 42
+          fulfil contact update 42 updates.json
         """
-        model = ctx.obj["model"]
+        app_ctx: AppContext = ctx.obj
         parsed_ids = _parse_ids(ids)
-        values = _parse_json_arg(data, "--data")
+        values = _parse_json_arg(data.read(), "data")
 
         try:
-            client = get_client()
-            result = client.call(f"model.{model}.update", ids=parsed_ids, values=values)
+            client = app_ctx.get_client()
+            result = client.call(f"model.{model_name}.update", ids=parsed_ids, values=values)
         except FulfilError as exc:
-            _handle_error(exc, model=model)
+            _handle_error(exc, model=model_name)
 
-        output(result, json_flag=json_flag)
+        output(result, fmt=app_ctx.get_effective_format(output_format))
 
     @model_group.command("delete")
     @click.argument("ids", type=str)
@@ -281,7 +276,7 @@ def create_model_group(model_name: str) -> click.Group:
 
         IDS is one or more comma-separated integers.
         """
-        model = ctx.obj["model"]
+        app_ctx: AppContext = ctx.obj
         parsed_ids = _parse_ids(ids)
 
         if not yes:
@@ -292,17 +287,20 @@ def create_model_group(model_name: str) -> click.Group:
                 )
                 raise typer.Exit(code=2)
             id_list = ", ".join(str(i) for i in parsed_ids)
-            if not click.confirm(f"Delete {len(parsed_ids)} record(s) from {model} ({id_list})?"):
+            if not click.confirm(
+                f"Delete {len(parsed_ids)} record(s) from {model_name} ({id_list})?"
+            ):
                 console.print("[dim]Aborted.[/dim]")
                 raise typer.Exit(code=0)
 
         try:
-            client = get_client()
-            client.call(f"model.{model}.delete", ids=parsed_ids)
+            client = app_ctx.get_client()
+            client.call(f"model.{model_name}.delete", ids=parsed_ids)
         except FulfilError as exc:
-            _handle_error(exc, model=model)
+            _handle_error(exc, model=model_name)
 
-        console.print(f"[green]Deleted {len(parsed_ids)} record(s).[/green]")
+        if not app_ctx.quiet:
+            console.print(f"[green]Deleted {len(parsed_ids)} record(s).[/green]")
 
     @model_group.command("count")
     @click.option(
@@ -313,27 +311,24 @@ def create_model_group(model_name: str) -> click.Group:
             'Example: \'{"state": "confirmed"}\''
         ),
     )
-    @click.option("--json", "json_flag", is_flag=True, help="Output as JSON")
+    @format_option
     @click.pass_context
-    def count_cmd(
-        ctx: click.Context,
-        where: str | None,
-        json_flag: bool,
-    ) -> None:
+    def count_cmd(ctx: click.Context, where: str | None, output_format: str | None) -> None:
         """Count records matching filters. Returns a single integer."""
-        model = ctx.obj["model"]
+        app_ctx: AppContext = ctx.obj
         params: dict[str, Any] = {}
         if where:
             params["where"] = _parse_json_arg(where, "--where")
 
         try:
-            client = get_client()
-            result = client.call(f"model.{model}.count", **params)
+            client = app_ctx.get_client()
+            result = client.call(f"model.{model_name}.count", **params)
         except FulfilError as exc:
-            _handle_error(exc, model=model)
+            _handle_error(exc, model=model_name)
 
-        if json_flag:
-            output({"count": result}, json_flag=True)
+        fmt = app_ctx.get_effective_format(output_format)
+        if fmt != "table":
+            output({"count": result}, fmt=fmt)
         else:
             console.print(str(result))
 
@@ -349,14 +344,14 @@ def create_model_group(model_name: str) -> click.Group:
         default=None,
         help=("Extra method arguments as a JSON object. Example: '{\"warehouse\": 1}'"),
     )
-    @click.option("--json", "json_flag", is_flag=True, help="Output as JSON")
+    @format_option
     @click.pass_context
     def call_cmd(
         ctx: click.Context,
         method_name: str,
         ids: str | None,
         data: str | None,
-        json_flag: bool,
+        output_format: str | None,
     ) -> None:
         """Call a custom method on the model.
 
@@ -368,7 +363,7 @@ def create_model_group(model_name: str) -> click.Group:
           fulfil sales_order call confirm --ids 1,2,3
           fulfil sales_order call process --ids 42
         """
-        model = ctx.obj["model"]
+        app_ctx: AppContext = ctx.obj
         params: dict[str, Any] = {}
         if ids:
             params["ids"] = _parse_ids(ids)
@@ -378,18 +373,20 @@ def create_model_group(model_name: str) -> click.Group:
                 params.update(extra)
 
         try:
-            client = get_client()
-            result = client.call(f"model.{model}.{method_name}", **params)
+            client = app_ctx.get_client()
+            result = client.call(f"model.{model_name}.{method_name}", **params)
         except FulfilError as exc:
-            _handle_error(exc, model=model)
+            _handle_error(exc, model=model_name)
 
-        output(result, json_flag=json_flag)
+        output(result, fmt=app_ctx.get_effective_format(output_format))
 
     @model_group.command("describe")
     @click.argument("endpoint_name", required=False, default=None)
-    @click.option("--json", "json_flag", is_flag=True, help="Output as JSON")
+    @format_option
     @click.pass_context
-    def describe_cmd(ctx: click.Context, endpoint_name: str | None, json_flag: bool) -> None:
+    def describe_cmd(
+        ctx: click.Context, endpoint_name: str | None, output_format: str | None
+    ) -> None:
         """Describe the model, or a specific endpoint.
 
         \b
@@ -397,37 +394,37 @@ def create_model_group(model_name: str) -> click.Group:
           fulfil sales_order describe find       # details for the find endpoint
           fulfil sales_order describe confirm    # details for the confirm endpoint
         """
-        model = ctx.obj["model"]
+        app_ctx: AppContext = ctx.obj
         try:
-            client = get_client()
-            result = client.call("system.describe_model", model=model)
+            client = app_ctx.get_client()
+            result = client.call("system.describe_model", model=model_name)
         except FulfilError as exc:
-            _handle_error(exc, model=model)
+            _handle_error(exc, model=model_name)
 
+        fmt = app_ctx.get_effective_format(output_format)
         if endpoint_name:
-            _describe_endpoint(result, model, endpoint_name, json_flag)
+            _describe_endpoint(result, model_name, endpoint_name, fmt)
         else:
-            output_model_describe(result, json_flag=json_flag)
+            output_model_describe(result, fmt=fmt)
 
     @model_group.command("fields")
-    @click.option("--json", "json_flag", is_flag=True, help="Output as JSON")
     @click.pass_context
-    def fields_cmd(ctx: click.Context, json_flag: bool) -> None:
+    def fields_cmd(ctx: click.Context) -> None:
         """Alias for 'describe'."""
-        ctx.invoke(describe_cmd, endpoint_name=None, json_flag=json_flag)
+        ctx.invoke(describe_cmd, endpoint_name=None)
 
     return model_group
 
 
-def _describe_endpoint(model_data: dict, model: str, endpoint_name: str, json_flag: bool) -> None:
+def _describe_endpoint(model_data: dict, model: str, endpoint_name: str, fmt: str) -> None:
     """Show details for a specific endpoint, or error if not found."""
     from fulfil_cli.output.describe import print_endpoint_detail
 
     endpoints = model_data.get("endpoints", [])
     for ep in endpoints:
         if ep.get("rpc_name") == endpoint_name or ep.get("name") == endpoint_name:
-            if json_flag:
-                output(ep, json_flag=True)
+            if fmt != "table":
+                output(ep, fmt=fmt)
             else:
                 print_endpoint_detail(ep, model)
             return

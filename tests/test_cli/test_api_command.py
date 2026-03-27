@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
 from typer.testing import CliRunner
 
 from fulfil_cli.cli.app import app
@@ -12,22 +11,12 @@ from fulfil_cli.cli.app import app
 runner = CliRunner()
 
 
-@pytest.fixture(autouse=True)
-def _reset_state():
-    """Reset global state before each test."""
-    from fulfil_cli.cli import state
-
-    state.set_globals()
-    yield
-    state.set_globals()
-
-
 class TestApiCommand:
     def test_valid_request(self, httpx_mock, cli_env, jsonrpc_success):
         httpx_mock.add_response(json=jsonrpc_success({"version": "1.0"}))
 
         payload = json.dumps({"method": "system.version", "params": {}})
-        result = runner.invoke(app, ["api", payload, "--json"])
+        result = runner.invoke(app, ["api", payload])
         assert result.exit_code == 0
 
         data = json.loads(result.stdout)
@@ -40,7 +29,7 @@ class TestApiCommand:
         httpx_mock.add_response(json=jsonrpc_success("ok"))
 
         payload = json.dumps({"method": "system.version", "params": {}})
-        result = runner.invoke(app, ["api", "-", "--json"], input=payload)
+        result = runner.invoke(app, ["api", "-"], input=payload)
         assert result.exit_code == 0
 
     def test_invalid_json(self, cli_env):

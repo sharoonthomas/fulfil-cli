@@ -31,9 +31,11 @@ class FulfilClient:
         token_refresher: Callable[[], str] | None = None,
         base_url: str | None = None,
         timeout: float = 30.0,
+        debug: bool = False,
     ) -> None:
         self.workspace = workspace
         self._token_refresher = token_refresher
+        self._debug = debug
         if base_url:
             self.url = f"{base_url.rstrip('/')}/api/v3/jsonrpc"
         else:
@@ -82,10 +84,7 @@ class FulfilClient:
         return self._send(payloads)
 
     def _send(self, payload: dict | list) -> Any:
-        from fulfil_cli.cli.state import is_debug
-
-        debug = is_debug()
-        if debug:
+        if self._debug:
             method = payload.get("method", "?") if isinstance(payload, dict) else "batch"
             _debug_console.print(f"[dim]DEBUG → POST {self.url} method={method}[/dim]")
 
@@ -101,7 +100,7 @@ class FulfilClient:
         except httpx.HTTPError as exc:
             raise NetworkError(message=str(exc)) from exc
 
-        if debug:
+        if self._debug:
             _debug_console.print(
                 f"[dim]DEBUG ← {response.status_code} "
                 f"{response.headers.get('content-type', '')}[/dim]"
