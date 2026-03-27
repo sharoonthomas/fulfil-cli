@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 
 # CLI exit codes
 EXIT_OK = 0
+EXIT_GENERAL = 1
 EXIT_USAGE = 2
 EXIT_CONFIG = 3
 EXIT_AUTH = 4

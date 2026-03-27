@@ -15,7 +15,7 @@ from fulfil_cli.cli.commands.completion import completion_install
 from fulfil_cli.cli.commands.model import create_model_group
 from fulfil_cli.cli.commands.report import create_report_group
 from fulfil_cli.cli.state import VALID_FORMATS, AppContext, format_option
-from fulfil_cli.client.errors import FulfilError
+from fulfil_cli.client.errors import EXIT_USAGE, FulfilError
 from fulfil_cli.output.formatter import output
 
 console = Console(stderr=True)
@@ -113,7 +113,7 @@ def main_callback(
             f"[red]Error: Invalid format '{output_format}'. "
             f"Choose from: {', '.join(VALID_FORMATS)}[/red]"
         )
-        raise typer.Exit(code=2)
+        raise typer.Exit(code=EXIT_USAGE)
     ctx.obj = AppContext(
         token=token,
         workspace=workspace,

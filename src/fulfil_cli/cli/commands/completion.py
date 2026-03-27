@@ -10,6 +10,8 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
+from fulfil_cli.client.errors import EXIT_GENERAL, EXIT_USAGE
+
 console = Console()
 
 
@@ -18,7 +20,7 @@ def completion_install() -> None:
     shell = _detect_shell()
     if not shell:
         console.print("[red]Could not detect shell. Set $SHELL and try again.[/red]")
-        raise typer.Exit(code=2)
+        raise typer.Exit(code=EXIT_USAGE)
 
     console.print(f"Detected shell: [bold]{shell}[/bold]")
 
@@ -38,7 +40,7 @@ def completion_install() -> None:
             console.print(f"[red]Failed to install completion: {result.stderr}[/red]")
     except Exception as exc:
         console.print(f"[red]Error: {exc}[/red]")
-        raise typer.Exit(code=1) from None
+        raise typer.Exit(code=EXIT_GENERAL) from None
 
 
 def _detect_shell() -> str | None:

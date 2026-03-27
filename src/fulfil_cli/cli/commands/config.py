@@ -6,6 +6,7 @@ import typer
 from rich.console import Console
 
 from fulfil_cli.cli.state import AppContext
+from fulfil_cli.client.errors import EXIT_GENERAL
 from fulfil_cli.config.manager import ConfigManager
 from fulfil_cli.output.formatter import output
 
@@ -38,7 +39,7 @@ def config_get(
     value = config.get(key)
     if value is None:
         console.print(f"[yellow]Key '{key}' is not set.[/yellow]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=EXIT_GENERAL)
     fmt = app_ctx.get_effective_format()
     if fmt != "table":
         output({key: value}, fmt=fmt)
