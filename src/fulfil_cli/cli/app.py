@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sys
+
 import click
 import typer
 import typer.core
@@ -13,17 +15,23 @@ from fulfil_cli.cli.commands.api import api_cmd
 from fulfil_cli.cli.commands.completion import completion_install
 from fulfil_cli.cli.commands.model import create_model_group
 from fulfil_cli.cli.commands.report import create_report_group
-from fulfil_cli.cli.state import get_client, is_quiet, set_globals
+from fulfil_cli.cli.state import VALID_FORMATS, AppContext, format_option
 from fulfil_cli.client.errors import FulfilError
 from fulfil_cli.output.formatter import output
+from fulfil_cli.output.json_output import print_json
 
 console = Console(stderr=True)
 
 
 def _handle_error(exc: FulfilError) -> None:
     """Print error and exit with appropriate code."""
+    ctx = click.get_current_context(silent=True)
+    app_ctx: AppContext | None = ctx.obj if ctx else None
+    if app_ctx and app_ctx.get_effective_format() != "table":
+        print_json(exc.to_dict(), file=sys.stderr)
+        raise typer.Exit(code=exc.exit_code)
     console.print(f"[red]Error: {exc}[/red]")
-    if exc.hint and not is_quiet():
+    if exc.hint and app_ctx and not app_ctx.quiet:
         console.print(f"[dim]Hint: {exc.hint}[/dim]")
     raise typer.Exit(code=exc.exit_code)
 
@@ -41,7 +49,6 @@ class ReportGroup(click.Group):
 class FulfilGroup(typer.core.TyperGroup):
     """Custom Click group that resolves unknown subcommands as model or report names."""
 
-    # Dynamic commands that should appear in help alongside static ones
     _dynamic_commands = ("models", "reports")
 
     def list_commands(self, ctx: click.Context) -> list[str]:
@@ -52,17 +59,13 @@ class FulfilGroup(typer.core.TyperGroup):
         return commands
 
     def get_command(self, ctx: click.Context, cmd_name: str) -> click.Command | None:
-        # Check static commands first
         rv = super().get_command(ctx, cmd_name)
         if rv is not None:
             return rv
-        # `fulfil models` / `fulfil models list`
         if cmd_name == "models":
             return models_group
-        # `fulfil reports` / `fulfil reports list` / `fulfil reports <name> execute`
         if cmd_name == "reports":
             return reports_group
-        # Treat as model name → return model sub-group
         return create_model_group(cmd_name)
 
 
@@ -113,34 +116,64 @@ def main_callback(
     base_url: str | None = typer.Option(None, "--base-url", hidden=True, help="Override base URL"),
     debug: bool = typer.Option(False, "--debug", help="Show debug output"),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Suppress hints and decorative output"),
+    output_format: str | None = typer.Option(
+        None,
+        "--format",
+        help="Output format: table, json, csv, ndjson (default: table for TTY, json when piped)",
+    ),
 ) -> None:
     """Root callback — sets global auth state."""
-    set_globals(token=token, workspace=workspace, base_url=base_url, debug=debug, quiet=quiet)
+    if output_format and output_format not in VALID_FORMATS:
+        console.print(
+            f"[red]Error: Invalid format '{output_format}'. "
+            f"Choose from: {', '.join(VALID_FORMATS)}[/red]"
+        )
+        raise typer.Exit(code=2)
+    ctx.obj = AppContext(
+        token=token,
+        workspace=workspace,
+        base_url=base_url,
+        debug=debug,
+        quiet=quiet,
+        output_format=output_format,
+    )
+
+
+FORMAT_OPTION = typer.Option(
+    None,
+    "--format",
+    help="Output format: table, json, csv, ndjson",
+)
 
 
 @app.command()
 def version(
-    json_flag: bool = typer.Option(False, "--json", help="Output as JSON"),
+    ctx: typer.Context,
+    output_format: str | None = FORMAT_OPTION,
 ) -> None:
     """Show CLI version."""
-    if json_flag:
-        output({"version": __version__}, json_flag=True)
-    else:
+    app_ctx: AppContext = ctx.obj
+    fmt = app_ctx.get_effective_format(output_format)
+    if fmt == "table":
         typer.echo(f"fulfil-cli {__version__}")
+    else:
+        output({"version": __version__}, fmt=fmt)
 
 
 @app.command()
 def whoami(
-    json_flag: bool = typer.Option(False, "--json", help="Output as JSON"),
+    ctx: typer.Context,
+    output_format: str | None = FORMAT_OPTION,
 ) -> None:
     """Show current user and workspace info."""
+    app_ctx: AppContext = ctx.obj
     try:
-        client = get_client()
+        client = app_ctx.get_client()
         result = client.call("system.whoami")
     except FulfilError as exc:
         _handle_error(exc)
 
-    output(result, json_flag=json_flag)
+    output(result, fmt=app_ctx.get_effective_format(output_format))
 
 
 def _flatten_model_row(row: dict) -> dict:
@@ -157,10 +190,11 @@ def _flatten_model_row(row: dict) -> dict:
     }
 
 
-def _list_models(json_flag: bool, search: str | None = None) -> None:
+def _list_models(fmt: str, search: str | None = None) -> None:
     """Fetch and display all available models."""
+    app_ctx: AppContext = click.get_current_context().obj
     try:
-        client = get_client()
+        client = app_ctx.get_client()
         result = client.call("system.list_models")
     except FulfilError as exc:
         _handle_error(exc)
@@ -178,43 +212,43 @@ def _list_models(json_flag: bool, search: str | None = None) -> None:
             )
         ]
 
-    if not json_flag and isinstance(result, list):
+    if fmt == "table" and isinstance(result, list):
         result = [_flatten_model_row(r) for r in result if isinstance(r, dict)]
 
-    output(result, json_flag=json_flag, title="Available Models")
+    output(result, fmt=fmt, title="Available Models")
 
 
 @click.group(name="models", help="List available models.", invoke_without_command=True)
-@click.option("--json", "json_flag", is_flag=True, help="Output as JSON")
 @click.option("--search", "-s", default=None, help="Filter by name, description, or category.")
+@format_option
 @click.pass_context
-def models_group(ctx: click.Context, json_flag: bool, search: str | None) -> None:
+def models_group(ctx: click.Context, search: str | None, output_format: str | None) -> None:
     """List all available models."""
-    ctx.ensure_object(dict)
-    ctx.obj["json_flag"] = json_flag
-    ctx.obj["search"] = search
     if ctx.invoked_subcommand is None:
-        _list_models(json_flag, search=search)
+        app_ctx: AppContext = ctx.obj
+        _list_models(app_ctx.get_effective_format(output_format), search=search)
 
 
 @models_group.command("list")
-@click.option("--json", "json_flag", is_flag=True, help="Output as JSON")
 @click.option("--search", "-s", default=None, help="Filter by name, description, or category.")
+@format_option
 @click.pass_context
-def models_list_cmd(ctx: click.Context, json_flag: bool, search: str | None) -> None:
+def models_list_cmd(ctx: click.Context, search: str | None, output_format: str | None) -> None:
     """List all available models."""
-    _list_models(json_flag, search=search)
+    app_ctx: AppContext = ctx.obj
+    _list_models(app_ctx.get_effective_format(output_format), search=search)
 
 
-def _list_reports(json_flag: bool) -> None:
+def _list_reports(fmt: str) -> None:
     """Fetch and display all available reports."""
+    app_ctx: AppContext = click.get_current_context().obj
     try:
-        client = get_client()
+        client = app_ctx.get_client()
         result = client.call("system.list_reports")
     except FulfilError as exc:
         _handle_error(exc)
 
-    output(result, json_flag=json_flag, title="Available Reports")
+    output(result, fmt=fmt, title="Available Reports")
 
 
 @click.group(
@@ -223,42 +257,46 @@ def _list_reports(json_flag: bool) -> None:
     help="Interact with reports.",
     invoke_without_command=True,
 )
-@click.option("--json", "json_flag", is_flag=True, help="Output as JSON")
+@format_option
 @click.pass_context
-def reports_group(ctx: click.Context, json_flag: bool) -> None:
+def reports_group(ctx: click.Context, output_format: str | None) -> None:
     """List all available reports."""
-    ctx.ensure_object(dict)
-    ctx.obj["json_flag"] = json_flag
     if ctx.invoked_subcommand is None:
-        _list_reports(json_flag)
+        app_ctx: AppContext = ctx.obj
+        _list_reports(app_ctx.get_effective_format(output_format))
 
 
 @reports_group.command("list")
-@click.option("--json", "json_flag", is_flag=True, help="Output as JSON")
+@format_option
 @click.pass_context
-def reports_list_cmd(ctx: click.Context, json_flag: bool) -> None:
+def reports_list_cmd(ctx: click.Context, output_format: str | None) -> None:
     """List all available reports."""
-    _list_reports(json_flag)
+    app_ctx: AppContext = ctx.obj
+    _list_reports(app_ctx.get_effective_format(output_format))
 
 
 @app.command()
 def docs(
+    ctx: typer.Context,
     query: str = typer.Argument(..., help="Search query for Fulfil documentation"),
-    json_flag: bool = typer.Option(False, "--json", help="Output as JSON"),
+    output_format: str | None = FORMAT_OPTION,
 ) -> None:
     """Search Fulfil documentation."""
+    app_ctx: AppContext = ctx.obj
     try:
-        client = get_client()
+        client = app_ctx.get_client()
         results = client.call("system.search_docs", query=query)
     except FulfilError as exc:
         _handle_error(exc)
 
     if not results:
-        console.print("[dim]No results found.[/dim]")
+        if not app_ctx.quiet:
+            console.print("[dim]No results found.[/dim]")
         raise typer.Exit()
 
-    if json_flag:
-        output(results, json_flag=True)
+    fmt = app_ctx.get_effective_format(output_format)
+    if fmt != "table":
+        output(results, fmt=fmt)
     else:
         from rich.markdown import Markdown
         from rich.panel import Panel
@@ -315,8 +353,8 @@ fulfil sales_order get 42
 ## 4. Create and update records
 
 ```
-fulfil contact create --data '{"name": "Acme Corp"}'
-fulfil sales_order update 42 --data '{"comment": "Approved"}'
+echo '{"name": "Acme Corp"}' | fulfil contact create
+fulfil sales_order update 42 updates.json
 ```
 
 ## 5. Call workflow methods
@@ -338,7 +376,8 @@ fulfil reports price_list_report execute --params '{"date_from": "2024-01-01"}'
 
 ## Tips
 
-- Use `--json` to force JSON output (automatic when piped)
+- Use `--format json` to force JSON output (automatic when piped)
+- Use `--format csv` or `--format ndjson` for other machine-readable formats
 - Use `--debug` to see HTTP request/response details
 - Use `-h` on any command for help: `fulfil sales_order list -h`
 - Run `fulfil completion` to install shell completions
@@ -349,7 +388,6 @@ fulfil reports price_list_report execute --params '{"date_from": "2024-01-01"}'
 # Register standalone commands
 app.command(name="api")(api_cmd)
 app.command(name="completion")(completion_install)
-
 
 # Top-level aliases for frequently-used auth subcommands
 app.command(name="workspaces")(auth.workspaces)

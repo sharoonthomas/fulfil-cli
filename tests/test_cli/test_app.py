@@ -10,13 +10,13 @@ runner = CliRunner()
 
 
 def test_version():
-    result = runner.invoke(app, ["version"])
+    result = runner.invoke(app, ["--format", "table", "version"])
     assert result.exit_code == 0
     assert "fulfil-cli" in result.output
 
 
 def test_version_json():
-    result = runner.invoke(app, ["version", "--json"])
+    result = runner.invoke(app, ["version"])
     assert result.exit_code == 0
     assert '"version"' in result.output
 

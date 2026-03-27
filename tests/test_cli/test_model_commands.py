@@ -65,23 +65,13 @@ class TestParseOrder:
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture(autouse=True)
-def _reset_state():
-    """Reset global state before each test."""
-    from fulfil_cli.cli import state
-
-    state.set_globals()
-    yield
-    state.set_globals()
-
-
 class TestListCommand:
     def test_happy_path(self, httpx_mock, cli_env, jsonrpc_success, pagination_response):
         records = [{"id": 1, "name": "SO001"}, {"id": 2, "name": "SO002"}]
         envelope = pagination_response(records)
         httpx_mock.add_response(json=jsonrpc_success(envelope))
 
-        result = runner.invoke(app, ["sale_order", "list", "--json"])
+        result = runner.invoke(app, ["sale_order", "list"])
         assert result.exit_code == 0
 
         data = json.loads(result.stdout)
@@ -95,9 +85,7 @@ class TestListCommand:
     def test_with_where(self, httpx_mock, cli_env, jsonrpc_success, pagination_response):
         httpx_mock.add_response(json=jsonrpc_success(pagination_response([{"id": 1}])))
 
-        result = runner.invoke(
-            app, ["sale_order", "list", "--where", '{"state": "confirmed"}', "--json"]
-        )
+        result = runner.invoke(app, ["sale_order", "list", "--where", '{"state": "confirmed"}'])
         assert result.exit_code == 0
 
         body = json.loads(httpx_mock.get_request().content)
@@ -106,7 +94,7 @@ class TestListCommand:
     def test_with_fields(self, httpx_mock, cli_env, jsonrpc_success, pagination_response):
         httpx_mock.add_response(json=jsonrpc_success(pagination_response([{"id": 1}])))
 
-        result = runner.invoke(app, ["sale_order", "list", "--fields", "name,state", "--json"])
+        result = runner.invoke(app, ["sale_order", "list", "--fields", "name,state"])
         assert result.exit_code == 0
 
         body = json.loads(httpx_mock.get_request().content)
@@ -115,7 +103,7 @@ class TestListCommand:
     def test_with_order(self, httpx_mock, cli_env, jsonrpc_success, pagination_response):
         httpx_mock.add_response(json=jsonrpc_success(pagination_response([{"id": 1}])))
 
-        result = runner.invoke(app, ["sale_order", "list", "--order", "date:desc,name", "--json"])
+        result = runner.invoke(app, ["sale_order", "list", "--order", "date:desc,name"])
         assert result.exit_code == 0
 
         body = json.loads(httpx_mock.get_request().content)
@@ -124,7 +112,7 @@ class TestListCommand:
     def test_with_cursor(self, httpx_mock, cli_env, jsonrpc_success, pagination_response):
         httpx_mock.add_response(json=jsonrpc_success(pagination_response([{"id": 2}])))
 
-        result = runner.invoke(app, ["sale_order", "list", "--cursor", "abc123", "--json"])
+        result = runner.invoke(app, ["sale_order", "list", "--cursor", "abc123"])
         assert result.exit_code == 0
 
         body = json.loads(httpx_mock.get_request().content)
@@ -133,7 +121,7 @@ class TestListCommand:
     def test_with_limit(self, httpx_mock, cli_env, jsonrpc_success, pagination_response):
         httpx_mock.add_response(json=jsonrpc_success(pagination_response([{"id": 1}])))
 
-        result = runner.invoke(app, ["sale_order", "list", "--limit", "50", "--json"])
+        result = runner.invoke(app, ["sale_order", "list", "--limit", "50"])
         assert result.exit_code == 0
 
         body = json.loads(httpx_mock.get_request().content)
@@ -143,7 +131,7 @@ class TestListCommand:
         """Servers returning a bare array instead of pagination envelope."""
         httpx_mock.add_response(json=jsonrpc_success([{"id": 1}, {"id": 2}]))
 
-        result = runner.invoke(app, ["sale_order", "list", "--json"])
+        result = runner.invoke(app, ["sale_order", "list"])
         assert result.exit_code == 0
 
         data = json.loads(result.stdout)
@@ -159,11 +147,11 @@ class TestGetCommand:
     def test_single_id(self, httpx_mock, cli_env, jsonrpc_success):
         httpx_mock.add_response(json=jsonrpc_success([{"id": 42, "name": "SO042"}]))
 
-        result = runner.invoke(app, ["sale_order", "get", "42", "--json"])
+        result = runner.invoke(app, ["sale_order", "get", "42"])
         assert result.exit_code == 0
 
         data = json.loads(result.stdout)
-        # Single ID → unwraps to single dict
+        # Single ID -> unwraps to single dict
         assert data == {"id": 42, "name": "SO042"}
 
         body = json.loads(httpx_mock.get_request().content)
@@ -173,7 +161,7 @@ class TestGetCommand:
     def test_multiple_ids(self, httpx_mock, cli_env, jsonrpc_success):
         httpx_mock.add_response(json=jsonrpc_success([{"id": 1}, {"id": 2}]))
 
-        result = runner.invoke(app, ["sale_order", "get", "1,2", "--json"])
+        result = runner.invoke(app, ["sale_order", "get", "1,2"])
         assert result.exit_code == 0
 
         data = json.loads(result.stdout)
@@ -190,7 +178,9 @@ class TestCreateCommand:
         httpx_mock.add_response(json=jsonrpc_success([101]))
 
         result = runner.invoke(
-            app, ["sale_order", "create", "--data", '{"name": "Test"}', "--json"]
+            app,
+            ["sale_order", "create"],
+            input='{"name": "Test"}',
         )
         assert result.exit_code == 0
 
@@ -203,7 +193,8 @@ class TestCreateCommand:
 
         result = runner.invoke(
             app,
-            ["sale_order", "create", "--data", '[{"name": "A"}, {"name": "B"}]', "--json"],
+            ["sale_order", "create"],
+            input='[{"name": "A"}, {"name": "B"}]',
         )
         assert result.exit_code == 0
 
@@ -211,7 +202,7 @@ class TestCreateCommand:
         assert body["params"]["vlist"] == [{"name": "A"}, {"name": "B"}]
 
     def test_invalid_json_data(self, cli_env):
-        result = runner.invoke(app, ["sale_order", "create", "--data", "bad"])
+        result = runner.invoke(app, ["sale_order", "create"], input="bad")
         assert result.exit_code == 7
 
 
@@ -221,7 +212,8 @@ class TestUpdateCommand:
 
         result = runner.invoke(
             app,
-            ["sale_order", "update", "1,2", "--data", '{"state": "confirmed"}', "--json"],
+            ["sale_order", "update", "1,2"],
+            input='{"state": "confirmed"}',
         )
         assert result.exit_code == 0
 
@@ -253,7 +245,7 @@ class TestCountCommand:
     def test_count_json(self, httpx_mock, cli_env, jsonrpc_success):
         httpx_mock.add_response(json=jsonrpc_success(42))
 
-        result = runner.invoke(app, ["sale_order", "count", "--json"])
+        result = runner.invoke(app, ["sale_order", "count"])
         assert result.exit_code == 0
 
         data = json.loads(result.stdout)
@@ -262,9 +254,7 @@ class TestCountCommand:
     def test_count_with_where(self, httpx_mock, cli_env, jsonrpc_success):
         httpx_mock.add_response(json=jsonrpc_success(5))
 
-        result = runner.invoke(
-            app, ["sale_order", "count", "--where", '{"state": "draft"}', "--json"]
-        )
+        result = runner.invoke(app, ["sale_order", "count", "--where", '{"state": "draft"}'])
         assert result.exit_code == 0
 
         body = json.loads(httpx_mock.get_request().content)
@@ -275,7 +265,7 @@ class TestCallCommand:
     def test_with_ids(self, httpx_mock, cli_env, jsonrpc_success):
         httpx_mock.add_response(json=jsonrpc_success(True))
 
-        result = runner.invoke(app, ["sale_order", "call", "confirm", "--ids", "1,2,3", "--json"])
+        result = runner.invoke(app, ["sale_order", "call", "confirm", "--ids", "1,2,3"])
         assert result.exit_code == 0
 
         body = json.loads(httpx_mock.get_request().content)
@@ -287,7 +277,7 @@ class TestCallCommand:
 
         result = runner.invoke(
             app,
-            ["sale_order", "call", "process", "--data", '{"warehouse": 1}', "--json"],
+            ["sale_order", "call", "process", "--data", '{"warehouse": 1}'],
         )
         assert result.exit_code == 0
 
@@ -308,7 +298,6 @@ class TestCallCommand:
                 "42",
                 "--data",
                 '{"force": true}',
-                "--json",
             ],
         )
         assert result.exit_code == 0
@@ -328,7 +317,7 @@ class TestDescribeCommand:
         }
         httpx_mock.add_response(json=jsonrpc_success(model_data))
 
-        result = runner.invoke(app, ["sale_order", "describe", "--json"])
+        result = runner.invoke(app, ["sale_order", "describe"])
         assert result.exit_code == 0
 
         data = json.loads(result.stdout)
@@ -345,7 +334,7 @@ class TestDescribeCommand:
         }
         httpx_mock.add_response(json=jsonrpc_success(model_data))
 
-        result = runner.invoke(app, ["sale_order", "describe", "find", "--json"])
+        result = runner.invoke(app, ["sale_order", "describe", "find"])
         assert result.exit_code == 0
 
         data = json.loads(result.stdout)
@@ -369,13 +358,13 @@ class TestErrorPaths:
     def test_server_error(self, httpx_mock, cli_env, jsonrpc_error):
         httpx_mock.add_response(json=jsonrpc_error(code=-32603, message="Internal error"))
 
-        result = runner.invoke(app, ["sale_order", "list", "--json"])
+        result = runner.invoke(app, ["sale_order", "list"])
         assert result.exit_code == 9
 
     def test_auth_error(self, httpx_mock, cli_env):
         httpx_mock.add_response(status_code=401, json={"error": "unauthorized"})
 
-        result = runner.invoke(app, ["sale_order", "list", "--json"])
+        result = runner.invoke(app, ["sale_order", "list"])
         assert result.exit_code == 4
 
     def test_validation_error_with_hint(self, httpx_mock, cli_env, jsonrpc_error):
@@ -387,5 +376,5 @@ class TestErrorPaths:
             )
         )
 
-        result = runner.invoke(app, ["sale_order", "list", "--json"])
+        result = runner.invoke(app, ["sale_order", "list"])
         assert result.exit_code == 7

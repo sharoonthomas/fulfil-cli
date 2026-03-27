@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
 from typer.testing import CliRunner
 
 from fulfil_cli.cli.app import app
@@ -12,22 +11,12 @@ from fulfil_cli.cli.app import app
 runner = CliRunner()
 
 
-@pytest.fixture(autouse=True)
-def _reset_state():
-    """Reset global state before each test."""
-    from fulfil_cli.cli import state
-
-    state.set_globals()
-    yield
-    state.set_globals()
-
-
 class TestWhoami:
     def test_happy_path(self, httpx_mock, cli_env, jsonrpc_success):
         whoami_data = {"user": "admin@test.com", "workspace": "test.fulfil.io"}
         httpx_mock.add_response(json=jsonrpc_success(whoami_data))
 
-        result = runner.invoke(app, ["whoami", "--json"])
+        result = runner.invoke(app, ["whoami"])
         assert result.exit_code == 0
 
         data = json.loads(result.stdout)
@@ -39,7 +28,7 @@ class TestWhoami:
     def test_auth_error(self, httpx_mock, cli_env):
         httpx_mock.add_response(status_code=401, json={"error": "unauthorized"})
 
-        result = runner.invoke(app, ["whoami", "--json"])
+        result = runner.invoke(app, ["whoami"])
         assert result.exit_code == 4
 
 
@@ -55,7 +44,7 @@ class TestModels:
         ]
         httpx_mock.add_response(json=jsonrpc_success(models))
 
-        result = runner.invoke(app, ["models", "--json"])
+        result = runner.invoke(app, ["models"])
         assert result.exit_code == 0
 
         data = json.loads(result.stdout)
@@ -82,7 +71,7 @@ class TestModels:
         ]
         httpx_mock.add_response(json=jsonrpc_success(models))
 
-        result = runner.invoke(app, ["models", "--search", "sale", "--json"])
+        result = runner.invoke(app, ["models", "--search", "sale"])
         assert result.exit_code == 0
 
         data = json.loads(result.stdout)
@@ -92,7 +81,7 @@ class TestModels:
     def test_models_list_subcommand(self, httpx_mock, cli_env, jsonrpc_success):
         httpx_mock.add_response(json=jsonrpc_success([]))
 
-        result = runner.invoke(app, ["models", "list", "--json"])
+        result = runner.invoke(app, ["models", "list"])
         assert result.exit_code == 0
 
 
@@ -101,7 +90,7 @@ class TestReports:
         reports = [{"name": "sales_report", "description": "Sales Report"}]
         httpx_mock.add_response(json=jsonrpc_success(reports))
 
-        result = runner.invoke(app, ["reports", "--json"])
+        result = runner.invoke(app, ["reports"])
         assert result.exit_code == 0
 
         data = json.loads(result.stdout)
@@ -113,5 +102,5 @@ class TestReports:
     def test_reports_list_subcommand(self, httpx_mock, cli_env, jsonrpc_success):
         httpx_mock.add_response(json=jsonrpc_success([]))
 
-        result = runner.invoke(app, ["reports", "list", "--json"])
+        result = runner.invoke(app, ["reports", "list"])
         assert result.exit_code == 0

@@ -47,7 +47,7 @@ class TestConfigGet:
     def test_get_existing(self, tmp_config):
         tmp_config.set("foo", "bar")
         with _patch_config(tmp_config):
-            result = runner.invoke(app, ["config", "get", "foo"])
+            result = runner.invoke(app, ["--format", "table", "config", "get", "foo"])
         assert result.exit_code == 0
         assert "bar" in result.stdout
 
@@ -59,7 +59,7 @@ class TestConfigGet:
     def test_get_json(self, tmp_config):
         tmp_config.set("foo", "bar")
         with _patch_config(tmp_config):
-            result = runner.invoke(app, ["config", "get", "foo", "--json"])
+            result = runner.invoke(app, ["config", "get", "foo"])
         assert result.exit_code == 0
         data = json.loads(result.stdout)
         assert data == {"foo": "bar"}
@@ -68,7 +68,7 @@ class TestConfigGet:
 class TestConfigList:
     def test_list_empty(self, tmp_config):
         with _patch_config(tmp_config):
-            result = runner.invoke(app, ["config", "list"])
+            result = runner.invoke(app, ["--format", "table", "config", "list"])
         assert result.exit_code == 0
         assert "No configuration" in result.stdout
 
@@ -76,7 +76,7 @@ class TestConfigList:
         tmp_config.set("foo", "bar")
         tmp_config.set("baz", "qux")
         with _patch_config(tmp_config):
-            result = runner.invoke(app, ["config", "list"])
+            result = runner.invoke(app, ["--format", "table", "config", "list"])
         assert result.exit_code == 0
         assert "foo = bar" in result.stdout
         assert "baz = qux" in result.stdout
@@ -84,7 +84,7 @@ class TestConfigList:
     def test_list_json(self, tmp_config):
         tmp_config.set("foo", "bar")
         with _patch_config(tmp_config):
-            result = runner.invoke(app, ["config", "list", "--json"])
+            result = runner.invoke(app, ["config", "list"])
         assert result.exit_code == 0
         data = json.loads(result.stdout)
         assert data["foo"] == "bar"

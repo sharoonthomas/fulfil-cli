@@ -28,6 +28,17 @@ class FulfilError(Exception):
     def __str__(self) -> str:
         return self.message
 
+    def to_dict(self) -> dict[str, object]:
+        """Return a JSON-serializable error representation."""
+        d: dict[str, object] = {
+            "error": type(self).__name__,
+            "message": self.message,
+            "exit_code": self.exit_code,
+        }
+        if self.hint:
+            d["hint"] = self.hint
+        return d
+
 
 @dataclass
 class ConfigError(FulfilError):

@@ -8,14 +8,19 @@ import sys
 import typer
 from rich.console import Console
 
-from fulfil_cli.cli.state import get_client
+from fulfil_cli.cli.state import AppContext
 from fulfil_cli.client.errors import FulfilError
 from fulfil_cli.output.formatter import output
+from fulfil_cli.output.json_output import print_json
 
 console = Console(stderr=True)
 
 
 def api_cmd(
+    ctx: typer.Context,
+    output_format: str | None = typer.Option(
+        None, "--format", help="Output format: table, json, csv, ndjson"
+    ),
     payload: str = typer.Argument(
         ...,
         help=(
@@ -24,7 +29,6 @@ def api_cmd(
             """Example: '{"method": "system.version", "params": {}}'"""
         ),
     ),
-    json_flag: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Send a raw JSON-RPC request to the Fulfil API.
 
@@ -34,6 +38,8 @@ def api_cmd(
       fulfil api '{"method": "model.sale_order.find", "params": {"where": {"state": "confirmed"}}}'
       echo '{"method": "system.version", "params": {}}' | fulfil api -
     """
+    app_ctx: AppContext = ctx.obj
+
     if payload == "-":
         payload = sys.stdin.read()
 
@@ -52,12 +58,16 @@ def api_cmd(
         raise typer.Exit(code=2)
 
     try:
-        client = get_client()
+        client = app_ctx.get_client()
         result = client.call(method, **params)
     except FulfilError as exc:
-        console.print(f"[red]Error: {exc}[/red]")
-        if exc.hint:
-            console.print(f"[dim]Hint: {exc.hint}[/dim]")
+        fmt = app_ctx.get_effective_format(output_format)
+        if fmt != "table":
+            print_json(exc.to_dict(), file=sys.stderr)
+        else:
+            console.print(f"[red]Error: {exc}[/red]")
+            if exc.hint:
+                console.print(f"[dim]Hint: {exc.hint}[/dim]")
         raise typer.Exit(code=exc.exit_code) from None
 
-    output(result, json_flag=json_flag)
+    output(result, fmt=app_ctx.get_effective_format(output_format))
