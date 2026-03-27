@@ -52,6 +52,7 @@ class FulfilClient:
             headers["X-API-KEY"] = api_key
 
         self._client = httpx.Client(headers=headers, timeout=timeout)
+        self._retrying = False
 
     def call(self, method: str, *args: Any, **params: Any) -> Any:
         """Make a single JSON-RPC call. Returns the result or raises.
@@ -107,7 +108,7 @@ class FulfilClient:
             )
 
         if response.status_code == 401:
-            if self._token_refresher and not getattr(self, "_retrying", False):
+            if self._token_refresher and not self._retrying:
                 new_token = self._token_refresher()
                 self._client.headers["Authorization"] = f"Bearer {new_token}"
                 self._retrying = True
@@ -135,7 +136,7 @@ class FulfilClient:
                     detail = body.get("message", "") or body.get("error", "")
                     if isinstance(detail, dict):
                         detail = detail.get("message", "")
-            except Exception:
+            except (ValueError, KeyError):
                 pass
             message = f"Server error ({response.status_code})"
             if detail:
@@ -151,7 +152,7 @@ class FulfilClient:
 
         try:
             result = response.json()
-        except Exception as exc:
+        except ValueError as exc:
             raise ServerError(message="Invalid JSON response from server") from exc
 
         # Handle batch responses
