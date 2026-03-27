@@ -185,15 +185,16 @@ def create_model_group(model_name: str) -> click.Group:
     @format_option
     @click.pass_context
     def create_cmd(ctx: click.Context, data: IO[str], output_format: str | None) -> None:
-        """Create new record(s). Returns the created record ID(s).
+        """Create record(s) from JSON. Accepts a single object or an array.
 
         \b
         DATA is a file path or '-' for stdin (default: stdin).
+        Prefer arrays for bulk creation — never loop single creates.
 
         Examples:
           echo '{"name": "Test"}' | fulfil contact create
+          echo '[{"name": "A"}, {"name": "B"}]' | fulfil contact create
           fulfil contact create records.json
-          cat records.json | fulfil contact create
         """
         app_ctx: AppContext = ctx.obj
         parsed = parse_json_arg(data.read(), "data")
