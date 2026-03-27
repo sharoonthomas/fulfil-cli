@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import sys
-
 import click
 import typer
 import typer.core
@@ -12,28 +10,15 @@ from rich.console import Console
 from fulfil_cli import __version__
 from fulfil_cli.cli.commands import auth, config
 from fulfil_cli.cli.commands.api import api_cmd
+from fulfil_cli.cli.commands.common import handle_error
 from fulfil_cli.cli.commands.completion import completion_install
 from fulfil_cli.cli.commands.model import create_model_group
 from fulfil_cli.cli.commands.report import create_report_group
 from fulfil_cli.cli.state import VALID_FORMATS, AppContext, format_option
 from fulfil_cli.client.errors import FulfilError
 from fulfil_cli.output.formatter import output
-from fulfil_cli.output.json_output import print_json
 
 console = Console(stderr=True)
-
-
-def _handle_error(exc: FulfilError) -> None:
-    """Print error and exit with appropriate code."""
-    ctx = click.get_current_context(silent=True)
-    app_ctx: AppContext | None = ctx.obj if ctx else None
-    if app_ctx and app_ctx.get_effective_format() != "table":
-        print_json(exc.to_dict(), file=sys.stderr)
-        raise typer.Exit(code=exc.exit_code)
-    console.print(f"[red]Error: {exc}[/red]")
-    if exc.hint and app_ctx and not app_ctx.quiet:
-        console.print(f"[dim]Hint: {exc.hint}[/dim]")
-    raise typer.Exit(code=exc.exit_code)
 
 
 class ReportGroup(click.Group):
@@ -171,7 +156,7 @@ def whoami(
         client = app_ctx.get_client()
         result = client.call("system.whoami")
     except FulfilError as exc:
-        _handle_error(exc)
+        handle_error(exc)
 
     output(result, fmt=app_ctx.get_effective_format(output_format))
 
@@ -197,7 +182,7 @@ def _list_models(fmt: str, search: str | None = None) -> None:
         client = app_ctx.get_client()
         result = client.call("system.list_models")
     except FulfilError as exc:
-        _handle_error(exc)
+        handle_error(exc)
 
     if search and isinstance(result, list):
         term = search.lower()
@@ -246,7 +231,7 @@ def _list_reports(fmt: str) -> None:
         client = app_ctx.get_client()
         result = client.call("system.list_reports")
     except FulfilError as exc:
-        _handle_error(exc)
+        handle_error(exc)
 
     output(result, fmt=fmt, title="Available Reports")
 
@@ -287,7 +272,7 @@ def docs(
         client = app_ctx.get_client()
         results = client.call("system.search_docs", query=query)
     except FulfilError as exc:
-        _handle_error(exc)
+        handle_error(exc)
 
     if not results:
         if not app_ctx.quiet:

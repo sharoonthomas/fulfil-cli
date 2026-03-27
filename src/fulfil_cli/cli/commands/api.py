@@ -8,10 +8,10 @@ import sys
 import typer
 from rich.console import Console
 
+from fulfil_cli.cli.commands.common import handle_error
 from fulfil_cli.cli.state import AppContext
 from fulfil_cli.client.errors import FulfilError
 from fulfil_cli.output.formatter import output
-from fulfil_cli.output.json_output import print_json
 
 console = Console(stderr=True)
 
@@ -49,25 +49,17 @@ def api_cmd(
         console.print(f"[red]Invalid JSON: {exc}[/red]")
         raise typer.Exit(code=7) from None
 
-    # Extract method and params from JSON-RPC envelope or shorthand
-    if "method" in data:
-        method = data["method"]
-        params = data.get("params", {})
-    else:
+    if "method" not in data:
         console.print("[red]JSON must contain a 'method' key.[/red]")
         raise typer.Exit(code=2)
+
+    method = data["method"]
+    params = data.get("params", {})
 
     try:
         client = app_ctx.get_client()
         result = client.call(method, **params)
     except FulfilError as exc:
-        fmt = app_ctx.get_effective_format(output_format)
-        if fmt != "table":
-            print_json(exc.to_dict(), file=sys.stderr)
-        else:
-            console.print(f"[red]Error: {exc}[/red]")
-            if exc.hint:
-                console.print(f"[dim]Hint: {exc.hint}[/dim]")
-        raise typer.Exit(code=exc.exit_code) from None
+        handle_error(exc)
 
     output(result, fmt=app_ctx.get_effective_format(output_format))
