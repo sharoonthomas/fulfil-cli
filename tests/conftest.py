@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from typer.testing import CliRunner
 
 
 @pytest.fixture
@@ -41,12 +40,6 @@ def jsonrpc_error():
         return {"jsonrpc": "2.0", "error": error, "id": request_id}
 
     return _make
-
-
-@pytest.fixture
-def cli_runner():
-    """Provide a Typer CliRunner instance."""
-    return CliRunner()
 
 
 @pytest.fixture

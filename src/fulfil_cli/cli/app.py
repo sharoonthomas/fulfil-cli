@@ -1,4 +1,12 @@
-"""Root CLI application with dynamic model subcommands."""
+"""Root CLI application with dynamic model and report subcommands.
+
+Typer handles the root app and static commands (auth, config, version)
+where type-driven argument parsing shines. Click groups are used for
+dynamic model and report routing because Typer does not support runtime
+subcommand creation via ``get_command`` overrides — the ``FulfilGroup``
+and ``ReportGroup`` classes intercept unknown subcommand names and
+resolve them as Fulfil model or report names respectively.
+"""
 
 from __future__ import annotations
 

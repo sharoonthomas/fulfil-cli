@@ -18,6 +18,7 @@ from fulfil_cli.auth.keyring_store import (
     store_api_key,
     store_oauth_tokens,
 )
+from fulfil_cli.auth.oauth import OAuthTokens, run_oauth_flow
 from fulfil_cli.client.errors import EXIT_CONFIG, EXIT_GENERAL, AuthError, FulfilError
 from fulfil_cli.client.http import FulfilClient
 from fulfil_cli.config.manager import ConfigManager
@@ -53,8 +54,6 @@ def _login_api_key(workspace: str, api_key: str | None, config: ConfigManager) -
 
 def _login_oauth(workspace: str, config: ConfigManager) -> None:
     """Login with OAuth 2.0 (authorization code + PKCE)."""
-    from fulfil_cli.auth.oauth import run_oauth_flow
-
     console.print(f"[dim]Starting OAuth login for {workspace}...[/dim]")
     console.print("[dim]Opening browser for authentication...[/dim]")
 
@@ -185,8 +184,6 @@ def status() -> None:
     elif auth_method == "oauth":
         tokens_json = get_oauth_tokens(workspace)
         if tokens_json:
-            from fulfil_cli.auth.oauth import OAuthTokens
-
             tokens = OAuthTokens.from_json(tokens_json)
             if tokens.is_expired:
                 if tokens.refresh_token:
