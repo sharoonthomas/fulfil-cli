@@ -140,8 +140,10 @@ def create_model_group(model_name: str) -> click.Group:
             records = result["data"]
             pagination = result["pagination"]
 
-            if fmt != "table":
+            if fmt == "json":
                 output(result, fmt=fmt)
+            elif fmt != "table":
+                output(records, fmt=fmt)
             else:
                 output(records, fmt="table", title=model_name)
                 if not app_ctx.quiet and pagination:
